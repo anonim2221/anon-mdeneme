@@ -1403,7 +1403,7 @@ function Library:CreateWindow(Settings)
             Title = string.sub(Title, 1, 27) .. "..."
         end
 
-        local ImageUrl = Config.ImageID and tostring(Config.ImageID) or "rbxassetid://54603127"
+        local ImageUrl = Config.ImageID and tostring(Config.ImageID) or "rbxassetid://80775958309470"
 
         local ContentSize = TxtS:GetTextSize(Content, 12, Library.GlobalFont, Vector2.new(218, 1000))
         local TotalHeight = math.max(60, 45 + ContentSize.Y)
