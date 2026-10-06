@@ -731,7 +731,7 @@ local function CreateRipple(btn, color)
 end
 
 local function MakeDraggable(topbar, frame)
-    local dragging, dragInput, dragStart, startPivot
+    local dragging, activeInputType, dragStart, startPivot
     local wasDragged = false
 
     local function getBounds()
@@ -772,7 +772,7 @@ local function MakeDraggable(topbar, frame)
     local function finishDrag(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = false
-            dragInput = nil
+            activeInputType = nil
         end
     end
 
@@ -780,11 +780,9 @@ local function MakeDraggable(topbar, frame)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             wasDragged = false
+            activeInputType = input.UserInputType
             dragStart = input.Position
             startPivot = getPivot()
-            if input.UserInputType == Enum.UserInputType.Touch then
-                dragInput = input
-            end
             input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
                     finishDrag(input)
@@ -793,16 +791,13 @@ local function MakeDraggable(topbar, frame)
         end
     end)
 
-    topbar.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-
     topbar.InputEnded:Connect(finishDrag)
+    UIS.InputEnded:Connect(finishDrag)
 
     UIS.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
+        local touchMoved = activeInputType == Enum.UserInputType.Touch and input.UserInputType == Enum.UserInputType.Touch
+        local mouseMoved = activeInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseMovement
+        if dragging and (touchMoved or mouseMoved) then
             local delta = input.Position - dragStart
             if delta.Magnitude > 5 then
                 wasDragged = true
@@ -1706,6 +1701,7 @@ function Library:CreateWindow(Settings)
         Parent = Main,
         Size = UDim2.new(1, 0, 0, 45),
         BackgroundTransparency = 1,
+        Active = true,
         ZIndex = 5
     })
     MakeDraggable(TopBar, WindowContainer)
@@ -1957,6 +1953,7 @@ function Library:CreateWindow(Settings)
             BackgroundColor3 = SelectedTheme.Main,
             BackgroundTransparency = 0.1,
             BorderSizePixel = 0,
+            Active = true,
             Image = "rbxassetid://80775958309470",
             ImageColor3 = Color3.fromRGB(255, 255, 255),
             ScaleType = Enum.ScaleType.Fit,
