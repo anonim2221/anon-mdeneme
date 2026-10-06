@@ -731,37 +731,103 @@ local function CreateRipple(btn, color)
 end
 
 local function MakeDraggable(topbar, frame)
-    local dragging, dragInput, dragStart, startPos
+    local dragging, dragInput, dragStart, startPivot
+    local wasDragged = false
+
+    local function getBounds()
+        local camera = workspace.CurrentCamera
+        local viewport = camera and camera.ViewportSize or Vector2.new(800, 600)
+        local screenGui = frame:FindFirstAncestorOfClass("ScreenGui")
+        local origin, bottomRight = Vector2.new(0, 0), Vector2.new(0, 0)
+        if screenGui and not screenGui.IgnoreGuiInset then
+            origin, bottomRight = game:GetService("GuiService"):GetGuiInset()
+        end
+        return origin, viewport - origin - bottomRight
+    end
+
+    local function getPivot()
+        local origin = getBounds()
+        local size = frame.AbsoluteSize
+        local absolute = frame.AbsolutePosition
+        local anchor = frame.AnchorPoint
+        return Vector2.new(
+            absolute.X - origin.X + size.X * anchor.X,
+            absolute.Y - origin.Y + size.Y * anchor.Y
+        )
+    end
+
+    local function placeAt(pivot)
+        local _, area = getBounds()
+        local size = frame.AbsoluteSize
+        local anchor = frame.AnchorPoint
+        local minX, minY = size.X * anchor.X, size.Y * anchor.Y
+        local maxX = math.max(minX, area.X - size.X * (1 - anchor.X))
+        local maxY = math.max(minY, area.Y - size.Y * (1 - anchor.Y))
+        frame.Position = UDim2.fromOffset(
+            math.clamp(pivot.X, minX, maxX),
+            math.clamp(pivot.Y, minY, maxY)
+        )
+    end
+
+    local function finishDrag(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+            dragInput = nil
+        end
+    end
+
     topbar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
+            wasDragged = false
             dragStart = input.Position
-            startPos = frame.Position
+            startPivot = getPivot()
+            if input.UserInputType == Enum.UserInputType.Touch then
+                dragInput = input
+            end
             input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
+                    finishDrag(input)
                 end
             end)
         end
     end)
-    topbar.InputChanged:Connect(function(input) 
+
+    topbar.InputChanged:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
             dragInput = input
-        end 
+        end
     end)
+
+    topbar.InputEnded:Connect(finishDrag)
+
     UIS.InputChanged:Connect(function(input)
         if input == dragInput and dragging then
             local delta = input.Position - dragStart
-            TS:Create(frame, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)}):Play()
+            if delta.Magnitude > 5 then
+                wasDragged = true
+                placeAt(startPivot + delta)
+            end
         end
     end)
+
+    return function()
+        return wasDragged
+    end
 end
 
-local function MakeResizable(handle, frame)
+local function MakeResizable(handle, frame, onSizeChanged)
     local dragging, dragStart, startSize
-    local MinSize = Vector2.new(500, 350)
-    local MaxSize = Vector2.new(1000, 800)
-    
+    local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1000, 800)
+    local MinSize = Vector2.new(
+        math.min(500, math.max(240, viewport.X - 32)),
+        math.min(350, math.max(240, viewport.Y - 32))
+    )
+    local MaxSize = Vector2.new(
+        math.max(MinSize.X, math.min(1000, viewport.X - 16)),
+        math.max(MinSize.Y, math.min(800, viewport.Y - 16))
+    )
+
     handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
@@ -774,13 +840,16 @@ local function MakeResizable(handle, frame)
             end)
         end
     end)
-    
+
     UIS.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
             local newX = math.clamp(startSize.X + delta.X, MinSize.X, MaxSize.X)
             local newY = math.clamp(startSize.Y + delta.Y, MinSize.Y, MaxSize.Y)
-            TS:Create(frame, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Size = UDim2.fromOffset(newX, newY)}):Play()
+            frame.Size = UDim2.fromOffset(newX, newY)
+            if onSizeChanged then
+                onSizeChanged(Vector2.new(newX, newY))
+            end
         end
     end)
 end
@@ -1592,9 +1661,29 @@ function Library:CreateWindow(Settings)
     AddCorner(Main, 12)
     AddStroke(Main, SelectedTheme)
     
-    TS:Create(WindowContainer, TweenInfo.new(0.7, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = WindowSize}):Play()
-    TS:Create(Shadow1, TweenInfo.new(0.7), {ImageTransparency = 0.35}):Play()
-    TS:Create(Shadow2, TweenInfo.new(0.7), {ImageTransparency = 0.4}):Play()
+    local LastSize = WindowSize
+    local WindowTween, Shadow1Tween, Shadow2Tween
+
+    local function PlayWindowTween(targetSize, tweenInfo)
+        if WindowTween then
+            WindowTween:Cancel()
+        end
+        WindowTween = TS:Create(WindowContainer, tweenInfo, {Size = targetSize})
+        WindowTween:Play()
+        return WindowTween
+    end
+
+    local function PlayShadowTweens(transparency, tweenInfo)
+        if Shadow1Tween then Shadow1Tween:Cancel() end
+        if Shadow2Tween then Shadow2Tween:Cancel() end
+        Shadow1Tween = TS:Create(Shadow1, tweenInfo, {ImageTransparency = transparency})
+        Shadow2Tween = TS:Create(Shadow2, tweenInfo, {ImageTransparency = math.min(1, transparency + 0.05)})
+        Shadow1Tween:Play()
+        Shadow2Tween:Play()
+    end
+
+    PlayWindowTween(WindowSize, TweenInfo.new(0.7, Enum.EasingStyle.Back, Enum.EasingDirection.Out))
+    PlayShadowTweens(0.35, TweenInfo.new(0.7))
 
     local ResizeBtn = Create("TextButton", {
         Parent = Main,
@@ -1609,7 +1698,9 @@ function Library:CreateWindow(Settings)
         ZIndex = 2000,
         ThemeTag = "TextDark"
     })
-    MakeResizable(ResizeBtn, WindowContainer)
+    MakeResizable(ResizeBtn, WindowContainer, function(size)
+        LastSize = UDim2.fromOffset(size.X, size.Y)
+    end)
 
     local TopBar = Create("Frame", {
         Parent = Main,
@@ -1834,26 +1925,25 @@ function Library:CreateWindow(Settings)
         ClipsDescendants = true
     })
 
-    local IsOpen, LastSize = true, WindowSize
+    local IsOpen = true
     
     local function ToggleUI()
-        IsOpen = not IsOpen 
-        if IsOpen then 
-            WindowContainer.Visible = true 
-            TS:Create(WindowContainer, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = LastSize}):Play() 
-            TS:Create(Shadow1, TweenInfo.new(0.6), {ImageTransparency = 0.35}):Play()
-            TS:Create(Shadow2, TweenInfo.new(0.6), {ImageTransparency = 0.4}):Play()
-        else 
-            LastSize = WindowContainer.Size 
-            local close = TS:Create(WindowContainer, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, 0)})
-            close:Play() 
-            TS:Create(Shadow1, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {ImageTransparency = 1}):Play()
-            TS:Create(Shadow2, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {ImageTransparency = 1}):Play()
-            close.Completed:Connect(function()
-                if not IsOpen then
+        IsOpen = not IsOpen
+        if IsOpen then
+            WindowContainer.Visible = true
+            PlayWindowTween(LastSize, TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out))
+            PlayShadowTweens(0.35, TweenInfo.new(0.25))
+        else
+            local closeTween = PlayWindowTween(
+                UDim2.fromOffset(0, 0),
+                TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+            )
+            PlayShadowTweens(1, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.In))
+            closeTween.Completed:Connect(function(playbackState)
+                if playbackState == Enum.PlaybackState.Completed and not IsOpen then
                     WindowContainer.Visible = false
                 end
-            end) 
+            end)
         end
     end
 
@@ -1861,22 +1951,29 @@ function Library:CreateWindow(Settings)
         local MobileBtn = Create("ImageButton", {
             Name = "MobileToggle",
             Parent = ScreenGui,
-            Size = UDim2.fromOffset(50, 50),
-            Position = UDim2.new(0.9, 0, 0.5, 0),
+            Size = UDim2.fromOffset(52, 52),
+            AnchorPoint = Vector2.new(1, 0.5),
+            Position = UDim2.new(1, -14, 0.5, 0),
             BackgroundColor3 = SelectedTheme.Main,
             BackgroundTransparency = 0.1,
             BorderSizePixel = 0,
-            Image = "rbxassetid://10884488899",
-            ImageColor3 = SelectedTheme.Accent,
+            Image = "rbxassetid://80775958309470",
+            ImageColor3 = Color3.fromRGB(255, 255, 255),
+            ScaleType = Enum.ScaleType.Fit,
+            AutoButtonColor = false,
             ThemeTag = "Main"
         })
         AddCorner(MobileBtn, 14)
         AddStroke(MobileBtn, SelectedTheme)
-        MakeDraggable(MobileBtn, MobileBtn)
+        local IsMobileButtonDragged = MakeDraggable(MobileBtn, MobileBtn)
         CreateDropShadow(MobileBtn, 35, 0.3)
         table.insert(Library.ThemeObjects.Accent, MobileBtn)
         
-        MobileBtn.MouseButton1Click:Connect(ToggleUI)
+        MobileBtn.MouseButton1Click:Connect(function()
+            if not IsMobileButtonDragged() then
+                ToggleUI()
+            end
+        end)
     end
 
     UIS.InputBegan:Connect(function(input, gpe)
