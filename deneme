@@ -3069,10 +3069,227 @@ function Elements:CreateDropdown(Cfg)
                 
                 Library.Items[Flag] = {
                     Set = Update,
-                    Refresh = function(self, list) RefreshList(list) end,
+                    Refresh = function(list) RefreshList(list) end,
                     Get = function() return Selected end
                 }
                 
+                return Library.Items[Flag]
+            end
+
+            function Elements:CreateMultiDropdown(Cfg)
+                ElementOrder = ElementOrder + 1
+                local Flag = Cfg.Flag or Cfg.Name
+                local Expanded = false
+                local Selected = {}
+                local Options = Cfg.Items or {}
+                if Cfg.Default then
+                    if type(Cfg.Default) == "table" then
+                        for _, v in pairs(Cfg.Default) do
+                            if type(v) == "string" then
+                                Selected[v] = true
+                            else
+                                for k, on in pairs(Cfg.Default) do
+                                    if on then Selected[k] = true end
+                                end
+                                break
+                            end
+                        end
+                    end
+                end
+                Library.Flags[Flag] = Selected
+
+                local Drop = Create("TextButton", {
+                    Parent = TargetParent,
+                    Size = UDim2.new(1, 0, 0, 34),
+                    BackgroundColor3 = SelectedTheme.Second,
+                    BackgroundTransparency = 0.5,
+                    Text = "",
+                    AutoButtonColor = false,
+                    ClipsDescendants = true,
+                    ZIndex = 7,
+                    LayoutOrder = ElementOrder,
+                    ThemeTag = "Second"
+                })
+                AddCorner(Drop, 8)
+                AddStroke(Drop, SelectedTheme).Transparency = 0.8
+                DefaultHover(Drop)
+
+                local Title = Create("TextLabel", {
+                    Parent = Drop,
+                    Size = UDim2.new(1, -40, 0, 34),
+                    Position = UDim2.new(0, 12, 0, 0),
+                    BackgroundTransparency = 1,
+                    Text = Cfg.Name or "Dropdown",
+                    Font = Library.GlobalFont,
+                    TextColor3 = SelectedTheme.Text,
+                    TextSize = 14,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    ZIndex = 8,
+                    TextTruncate = Enum.TextTruncate.AtEnd,
+                    ThemeTag = "Text"
+                })
+
+                local Arrow = Create("ImageLabel", {
+                    Parent = Drop,
+                    Size = UDim2.new(0, 16, 0, 16),
+                    Position = UDim2.new(1, -28, 0, 9),
+                    BackgroundTransparency = 1,
+                    Image = "rbxassetid://6031091004",
+                    ImageColor3 = SelectedTheme.TextDark,
+                    ZIndex = 8
+                })
+                table.insert(Library.ThemeObjects.TextDark, Arrow)
+
+                local Container = Create("ScrollingFrame", {
+                    Parent = Drop,
+                    Size = UDim2.new(1, 0, 0, 0),
+                    Position = UDim2.new(0, 0, 0, 34),
+                    BackgroundTransparency = 1,
+                    ZIndex = 8,
+                    ScrollBarThickness = 2,
+                    ScrollBarImageColor3 = SelectedTheme.TextDark,
+                    BorderSizePixel = 0,
+                    CanvasSize = UDim2.new(0, 0, 0, 0)
+                })
+                Create("UIPadding", {
+                    Parent = Container,
+                    PaddingTop = UDim.new(0, 5),
+                    PaddingBottom = UDim.new(0, 5),
+                    PaddingLeft = UDim.new(0, 8),
+                    PaddingRight = UDim.new(0, 8)
+                })
+                local ListLayout = Create("UIListLayout", { Parent = Container, Padding = UDim.new(0, 4) })
+
+                local function Summary()
+                    local parts = {}
+                    for _, v in ipairs(Options) do
+                        if Selected[v] then
+                            table.insert(parts, tostring(v))
+                        end
+                    end
+                    if #parts == 0 then
+                        Title.Text = (Cfg.Name or "Dropdown")
+                    else
+                        Title.Text = (Cfg.Name or "Dropdown") .. " - " .. table.concat(parts, ", ")
+                    end
+                end
+
+                local function Fire()
+                    Library.Flags[Flag] = Selected
+                    Summary()
+                    if Cfg.Callback then
+                        task.spawn(Cfg.Callback, Selected)
+                    end
+                end
+
+                local itemButtons = {}
+
+                local function RefreshList(newOptions)
+                    Options = newOptions or Options
+                    for _, v in pairs(Container:GetChildren()) do
+                        if v:IsA("TextButton") then
+                            v:Destroy()
+                        end
+                    end
+                    itemButtons = {}
+                    for _, item in pairs(Options) do
+                        local itemText = tostring(item)
+                        local Btn = Create("TextButton", {
+                            Parent = Container,
+                            Size = UDim2.new(1, 0, 0, 28),
+                            BackgroundColor3 = SelectedTheme.Main,
+                            BackgroundTransparency = 0.8,
+                            Text = "",
+                            Font = Library.GlobalFont,
+                            TextColor3 = SelectedTheme.TextDark,
+                            TextSize = 13,
+                            ZIndex = 9,
+                            TextXAlignment = Enum.TextXAlignment.Left,
+                            AutoButtonColor = false,
+                            ThemeTag = "Main"
+                        })
+                        AddCorner(Btn, 6)
+
+                        local Check = Create("Frame", {
+                            Parent = Btn,
+                            Size = UDim2.new(0, 14, 0, 14),
+                            Position = UDim2.new(0, 8, 0.5, -7),
+                            BackgroundColor3 = Selected[item] and SelectedTheme.ElementAccent or Color3.new(0, 0, 0),
+                            BackgroundTransparency = Selected[item] and 0 or 0.6,
+                            BorderSizePixel = 0,
+                            ZIndex = 10
+                        })
+                        AddCorner(Check, 4)
+
+                        local Lab = Create("TextLabel", {
+                            Parent = Btn,
+                            Size = UDim2.new(1, -36, 1, 0),
+                            Position = UDim2.new(0, 30, 0, 0),
+                            BackgroundTransparency = 1,
+                            Text = itemText,
+                            Font = Library.GlobalFont,
+                            TextColor3 = Selected[item] and SelectedTheme.Text or SelectedTheme.TextDark,
+                            TextSize = 13,
+                            TextXAlignment = Enum.TextXAlignment.Left,
+                            TextTruncate = Enum.TextTruncate.AtEnd,
+                            ZIndex = 10,
+                            ThemeTag = "TextDark"
+                        })
+
+                        itemButtons[item] = { Btn = Btn, Check = Check, Lab = Lab }
+
+                        Btn.MouseButton1Click:Connect(function()
+                            Selected[item] = not Selected[item] or nil
+                            local on = Selected[item] == true
+                            pcall(function()
+                                Check.BackgroundColor3 = on and SelectedTheme.ElementAccent or Color3.new(0, 0, 0)
+                                Check.BackgroundTransparency = on and 0 or 0.6
+                                Lab.TextColor3 = on and SelectedTheme.Text or SelectedTheme.TextDark
+                            end)
+                            Fire()
+                        end)
+                    end
+                    local stepH = 32
+                    Container.CanvasSize = UDim2.new(0, 0, 0, #Options * stepH + 10)
+                    Summary()
+                end
+
+                RefreshList(Options)
+                Fire()
+
+                Drop.MouseButton1Click:Connect(function()
+                    Expanded = not Expanded
+                    local H = Expanded and math.min(#Options * 32 + 44, 220) or 34
+                    TS:Create(Drop, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Size = UDim2.new(1, 0, 0, H) }):Play()
+                    TS:Create(Arrow, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Rotation = Expanded and 180 or 0 }):Play()
+                    TS:Create(Container, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Size = UDim2.new(1, 0, 1, -34) }):Play()
+                end)
+
+                Library.Items[Flag] = {
+                    Set = function(val)
+                        if type(val) ~= "table" then return end
+                        table.clear(Selected)
+                        for k, v in pairs(val) do
+                            if type(k) == "number" then
+                                Selected[v] = true
+                            elseif v then
+                                Selected[k] = true
+                            end
+                        end
+                        for item, parts in pairs(itemButtons) do
+                            local on = Selected[item] == true
+                            pcall(function()
+                                parts.Check.BackgroundColor3 = on and SelectedTheme.ElementAccent or Color3.new(0, 0, 0)
+                                parts.Check.BackgroundTransparency = on and 0 or 0.6
+                                parts.Lab.TextColor3 = on and SelectedTheme.Text or SelectedTheme.TextDark
+                            end)
+                        end
+                        Fire()
+                    end,
+                    Refresh = function(self, list) RefreshList(list) end,
+                    Get = function() return Selected end
+                }
+
                 return Library.Items[Flag]
             end
 
