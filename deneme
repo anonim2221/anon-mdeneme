@@ -733,9 +733,6 @@ end
 local function MakeDraggable(topbar, frame)
     local dragging, dragInput, dragStart, startPos
     topbar.InputBegan:Connect(function(input)
-        if Library.CantDragForced and frame == Library.MainDragFrame then
-            return
-        end
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
@@ -1595,10 +1592,9 @@ function Library:CreateWindow(Settings)
     AddCorner(Main, 12)
     AddStroke(Main, SelectedTheme)
     
-    -- ANONIM: RESO-style instant open (no scale animation)
-    WindowContainer.Size = WindowSize
-    Shadow1.ImageTransparency = 0.35
-    Shadow2.ImageTransparency = 0.4
+    TS:Create(WindowContainer, TweenInfo.new(0.7, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = WindowSize}):Play()
+    TS:Create(Shadow1, TweenInfo.new(0.7), {ImageTransparency = 0.35}):Play()
+    TS:Create(Shadow2, TweenInfo.new(0.7), {ImageTransparency = 0.4}):Play()
 
     local ResizeBtn = Create("TextButton", {
         Parent = Main,
@@ -1606,50 +1602,13 @@ function Library:CreateWindow(Settings)
         Position = UDim2.new(1, 0, 1, 0),
         AnchorPoint = Vector2.new(1, 1),
         BackgroundTransparency = 1,
-        Text = "",
+        Text = "◢",
         Font = Library.GlobalFont,
         TextColor3 = SelectedTheme.TextDark,
         TextSize = 10,
         ZIndex = 2000,
         ThemeTag = "TextDark"
     })
-
-    -- ANONIM: RESO-style resize icon (move-diagonal-2 look, drawn with frames)
-    local ResizeIconHolder = Create("Frame", {
-        Parent = ResizeBtn,
-        Size = UDim2.fromOffset(14, 14),
-        Position = UDim2.fromOffset(5, 5),
-        BackgroundTransparency = 1,
-        ZIndex = 2001
-    })
-    local ResizeDiag = Create("Frame", {
-        Parent = ResizeIconHolder,
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.new(1, -4, 0, 1.5),
-        BackgroundColor3 = SelectedTheme.TextDark,
-        BackgroundTransparency = 0.3,
-        BorderSizePixel = 0,
-        Rotation = -45,
-        ZIndex = 2001,
-        ThemeTag = "TextDark"
-    })
-    AddCorner(ResizeDiag, 2)
-    for _, tipPos in ipairs({UDim2.fromOffset(0, 0), UDim2.fromOffset(11, 11)}) do
-        local Tip = Create("Frame", {
-            Parent = ResizeIconHolder,
-            Position = tipPos,
-            Size = UDim2.fromOffset(3, 3),
-            BackgroundColor3 = SelectedTheme.TextDark,
-            BackgroundTransparency = 0.3,
-            BorderSizePixel = 0,
-            Rotation = 45,
-            ZIndex = 2001,
-            ThemeTag = "TextDark"
-        })
-        AddCorner(Tip, 1)
-    end
-
     MakeResizable(ResizeBtn, WindowContainer)
 
     local TopBar = Create("Frame", {
@@ -1658,8 +1617,6 @@ function Library:CreateWindow(Settings)
         BackgroundTransparency = 1,
         ZIndex = 5
     })
-    -- ANONIM: main drag target for the Lock button (RESO-style)
-    Library.MainDragFrame = WindowContainer
     MakeDraggable(TopBar, WindowContainer)
     
     Create("Frame", {
@@ -1699,62 +1656,6 @@ function Library:CreateWindow(Settings)
         ZIndex = 6,
         ThemeTag = "Text"
     })
-    
-    -- ANONIM: RESO-style move (drag handle) icon on the top bar
-    local MoveIconHolder = Create("Frame", {
-        Name = "MoveIcon",
-        Parent = TopBar,
-        Size = UDim2.fromOffset(18, 18),
-        Position = UDim2.new(1, -68, 0.5, -9),
-        BackgroundTransparency = 1,
-        ZIndex = 6
-    })
-    do
-        local MoveColor = SelectedTheme.TextDark
-        local MoveBarH = Create("Frame", {
-            Parent = MoveIconHolder,
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.new(1, -6, 0, 1.5),
-            BackgroundColor3 = MoveColor,
-            BackgroundTransparency = 0.35,
-            BorderSizePixel = 0,
-            ZIndex = 6,
-            ThemeTag = "TextDark"
-        })
-        AddCorner(MoveBarH, 2)
-        local MoveBarV = Create("Frame", {
-            Parent = MoveIconHolder,
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.new(0, 1.5, 1, -6),
-            BackgroundColor3 = MoveColor,
-            BackgroundTransparency = 0.35,
-            BorderSizePixel = 0,
-            ZIndex = 6,
-            ThemeTag = "TextDark"
-        })
-        AddCorner(MoveBarV, 2)
-        for _, tipCfg in ipairs({
-            {Pos = UDim2.new(0, 2, 0, 8.25), Rot = 0},
-            {Pos = UDim2.new(1, -5, 0, 8.25), Rot = 0},
-            {Pos = UDim2.new(0, 8.25, 0, 2), Rot = 0},
-            {Pos = UDim2.new(0, 8.25, 1, -5), Rot = 0},
-        }) do
-            local Tip = Create("Frame", {
-                Parent = MoveIconHolder,
-                Position = tipCfg.Pos,
-                Size = UDim2.fromOffset(3, 3),
-                BackgroundColor3 = MoveColor,
-                BackgroundTransparency = 0.35,
-                BorderSizePixel = 0,
-                Rotation = 45,
-                ZIndex = 6,
-                ThemeTag = "TextDark"
-            })
-            AddCorner(Tip, 1)
-        end
-    end
     
     local Close = Create("TextButton", {
         Parent = TopBar,
@@ -1939,14 +1840,20 @@ function Library:CreateWindow(Settings)
         IsOpen = not IsOpen 
         if IsOpen then 
             WindowContainer.Visible = true 
-            -- ANONIM: RESO-style instant show (no animation)
-            WindowContainer.Size = LastSize
-            Shadow1.ImageTransparency = 0.35
-            Shadow2.ImageTransparency = 0.4
+            TS:Create(WindowContainer, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = LastSize}):Play() 
+            TS:Create(Shadow1, TweenInfo.new(0.6), {ImageTransparency = 0.35}):Play()
+            TS:Create(Shadow2, TweenInfo.new(0.6), {ImageTransparency = 0.4}):Play()
         else 
             LastSize = WindowContainer.Size 
-            -- ANONIM: RESO-style instant hide (no animation)
-            WindowContainer.Visible = false
+            local close = TS:Create(WindowContainer, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, 0)})
+            close:Play() 
+            TS:Create(Shadow1, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {ImageTransparency = 1}):Play()
+            TS:Create(Shadow2, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {ImageTransparency = 1}):Play()
+            close.Completed:Connect(function()
+                if not IsOpen then
+                    WindowContainer.Visible = false
+                end
+            end) 
         end
     end
 
@@ -1970,58 +1877,6 @@ function Library:CreateWindow(Settings)
         table.insert(Library.ThemeObjects.Accent, MobileBtn)
         
         MobileBtn.MouseButton1Click:Connect(ToggleUI)
-    end
-
-    -- ANONIM: RESO-style floating window buttons (Toggle + Lock)
-    do
-        local function MakeFloatButton(text, order, onClick)
-            local Btn = Create("TextButton", {
-                Name = "Float_" .. text,
-                Parent = ScreenGui,
-                Size = UDim2.fromOffset(76, 30),
-                Position = UDim2.new(0, 6, 0, 6 + ((order - 1) * 36)),
-                BackgroundColor3 = SelectedTheme.Main,
-                BackgroundTransparency = 0.1,
-                BorderSizePixel = 0,
-                Text = text,
-                Font = Library.GlobalFontBold,
-                TextColor3 = SelectedTheme.Text,
-                TextSize = 13,
-                AutoButtonColor = false,
-                ZIndex = 5000,
-                ThemeTag = "Main"
-            })
-            AddCorner(Btn, 10)
-            AddStroke(Btn, SelectedTheme)
-            CreateDropShadow(Btn, 35, 0.3)
-            table.insert(Library.ThemeObjects.Text, Btn)
-            MakeDraggable(Btn, Btn)
-
-            local hoverTween, leaveTween
-            Btn.MouseEnter:Connect(function()
-                if leaveTween then leaveTween:Cancel() end
-                hoverTween = TS:Create(Btn, TweenInfo.new(0.15), {BackgroundTransparency = 0.35})
-                hoverTween:Play()
-            end)
-            Btn.MouseLeave:Connect(function()
-                if hoverTween then hoverTween:Cancel() end
-                leaveTween = TS:Create(Btn, TweenInfo.new(0.15), {BackgroundTransparency = 0.1})
-                leaveTween:Play()
-            end)
-
-            Btn.MouseButton1Click:Connect(onClick)
-            return Btn
-        end
-
-        MakeFloatButton("Toggle", 1, function()
-            ToggleUI()
-        end)
-
-        local LockBtn = MakeFloatButton("Lock", 2, function() end)
-        LockBtn.MouseButton1Click:Connect(function()
-            Library.CantDragForced = not Library.CantDragForced
-            LockBtn.Text = Library.CantDragForced and "Unlock" or "Lock"
-        end)
     end
 
     UIS.InputBegan:Connect(function(input, gpe)
@@ -2351,6 +2206,7 @@ function Library:CreateWindow(Settings)
                     ThemeTag = "Text"
                 })
                 Create("UIPadding", { Parent = Lab, PaddingLeft = UDim.new(0, 6) })
+                return Lab
             end
 
                 function Elements:CreateLabel(Cfg)
@@ -2452,7 +2308,7 @@ function Library:CreateWindow(Settings)
                 AddCorner(Btn, 8)
                 AddStroke(Btn, SelectedTheme).Transparency = 0.8
 
-                local BtnLabel = Create("TextLabel", {
+                Create("TextLabel", {
                     Parent = Btn,
                     Size = UDim2.new(1, -20, 1, 0),
                     Position = UDim2.new(0, 10, 0, 0),
@@ -2479,12 +2335,15 @@ function Library:CreateWindow(Settings)
                     end
                 end)
 
-                return {
-                    Button = Btn,
-                    SetText = function(_, text)
-                        BtnLabel.Text = tostring(text)
+                Library.Items[Flag] = Library.Items[Flag] or {}
+                Library.Items[Flag].SetVisible = function(self, vis)
+                    Btn.Visible = vis and true or false
+                end
+                Library.Items[Flag].Fire = function()
+                    if Cfg.Callback then
+                        Cfg.Callback()
                     end
-                }
+                end
             end
 
             function Elements:CreateToggle(Cfg)
@@ -2587,6 +2446,9 @@ function Library:CreateWindow(Settings)
                         if val == nil then return end
                         if State == val then return end
                         UpdateState(val)
+                    end
+                    ,SetVisible = function(self, vis)
+                        Btn.Visible = vis and true or false
                     end
                 }
             end
@@ -2691,6 +2553,10 @@ function Library:CreateWindow(Settings)
                 
                 local function Update(val)
                     val = math.clamp(val, Min, Max)
+                    if Cfg.Rounding then
+                        local m = 10 ^ Cfg.Rounding
+                        val = math.floor(val * m + 0.5) / m
+                    end
                     Val = val
                     Library.Flags[Flag] = val
                     ValLbl.Text = tostring(Val)
@@ -2710,7 +2576,8 @@ function Library:CreateWindow(Settings)
                 
                 local function DragUpdate(input)
                     local p = math.clamp((input.Position.X - SlideBar.AbsolutePosition.X) / SlideBar.AbsoluteSize.X, 0, 1)
-                    Update(math.floor(Min + ((Max - Min) * p)))
+                    local rawVal = Min + ((Max - Min) * p)
+                    Update(Cfg.Rounding and rawVal or math.floor(rawVal))
                 end
                 
                 SlideBar.InputBegan:Connect(function(i)
@@ -2743,7 +2610,11 @@ function Library:CreateWindow(Settings)
                     end
                 end)
 
-                Library.Items[Flag] = {Set = Update}
+                Library.Items[Flag] = {Set = Update,
+                    SetVisible = function(self, vis)
+                        Frame.Visible = vis and true or false
+                    end
+                }
             end
 
             function Elements:CreateInput(Cfg)
@@ -2845,16 +2716,26 @@ function Library:CreateWindow(Settings)
                     Update(Box.Text)
                 end)
                 
-                Library.Items[Flag] = {Set = Update}
+                Library.Items[Flag] = {Set = Update,
+                    SetVisible = function(self, vis)
+                        Frame.Visible = vis and true or false
+                    end
+                }
             end
 
 function Elements:CreateDropdown(Cfg)
                 ElementOrder = ElementOrder + 1
                 local Flag = Cfg.Flag or Cfg.Name
                 local Expanded = false
+                local IsMulti = Cfg.Multi == true
+                local UseSearch = Cfg.Search == true
                 local Selected = Cfg.Default
-                local Options = Cfg.Items or {}
-                local PlayerIcons = Cfg.PlayerIcons == true -- Oyuncu profil desteği
+                if IsMulti and type(Selected) ~= "table" then
+                    Selected = {}
+                end
+                local MasterOptions = Cfg.Items or {}
+                local Options = MasterOptions
+                local PlayerIcons = Cfg.PlayerIcons == true -- Oyuncu profil destegi
                 
                 local Drop = Create("TextButton", {
                     Parent = TargetParent,
@@ -2878,7 +2759,7 @@ function Elements:CreateDropdown(Cfg)
                     Size = UDim2.new(1, -40, 0, 34),
                     Position = UDim2.new(0, 12, 0, 0),
                     BackgroundTransparency = 1,
-                    Text = (Cfg.Name or "Dropdown") .. (Selected and " - " .. tostring(Selected) or ""),
+                    Text = Cfg.Name or "Dropdown",
                     Font = Library.GlobalFont,
                     TextColor3 = SelectedTheme.Text,
                     TextSize = 14,
@@ -2920,37 +2801,130 @@ function Elements:CreateDropdown(Cfg)
                 })
                 
                 local ListLayout = Create("UIListLayout", { Parent = Container, Padding = UDim.new(0, 4) })
-                
-                local function Update(val) 
-                    Selected = val 
-                    Title.Text = (Cfg.Name or "Dropdown") .. " - " .. tostring(Selected) 
+
+                local SearchBox = nil
+                local SearchQuery = ""
+                if UseSearch then
+                    local SearchFrame = Create("Frame", {
+                        Parent = Container,
+                        Size = UDim2.new(1, 0, 0, 26),
+                        LayoutOrder = -100,
+                        BackgroundColor3 = SelectedTheme.Main,
+                        BackgroundTransparency = 0.55,
+                        ZIndex = 9,
+                        ThemeTag = "Main"
+                    })
+                    AddCorner(SearchFrame, 6)
+                    SearchBox = Create("TextBox", {
+                        Parent = SearchFrame,
+                        Size = UDim2.new(1, -12, 1, 0),
+                        Position = UDim2.new(0, 6, 0, 0),
+                        BackgroundTransparency = 1,
+                        PlaceholderText = "Search...",
+                        PlaceholderColor3 = SelectedTheme.TextDark,
+                        Text = "",
+                        Font = Library.GlobalFont,
+                        TextColor3 = SelectedTheme.Text,
+                        TextSize = 12,
+                        TextXAlignment = Enum.TextXAlignment.Left,
+                        ClearTextOnFocus = false,
+                        ZIndex = 10
+                    })
+                end
+
+                local ItemRefs = {}
+
+                local function DisplayText(val)
+                    if IsMulti then
+                        local names = {}
+                        for k in pairs(val or {}) do
+                            table.insert(names, tostring(k))
+                        end
+                        if #names == 0 then
+                            return Cfg.Name or "Dropdown"
+                        end
+                        table.sort(names)
+                        local txt
+                        if #names > 3 then
+                            txt = names[1] .. ", " .. names[2] .. " +" .. tostring(#names - 2)
+                        else
+                            txt = table.concat(names, ", ")
+                        end
+                        return (Cfg.Name or "Dropdown") .. " - " .. txt
+                    else
+                        return (Cfg.Name or "Dropdown") .. (val and " - " .. tostring(val) or "")
+                    end
+                end
+
+                local function Update(val)
+                    Selected = val
+                    Title.Text = DisplayText(Selected)
                     if Cfg.Callback then
                         Cfg.Callback(val)
                     end
                     Library.Flags[Flag] = val
                 end
 
-                local function RefreshList(newOptions)
-                    Options = newOptions or Options
+                local function ApplyMultiVisuals()
+                    if not IsMulti then
+                        return
+                    end
+                    for item, ref in pairs(ItemRefs) do
+                        local on = type(Selected) == "table" and Selected[item] ~= nil
+                        ref.Btn.BackgroundTransparency = on and 0.35 or 0.8
+                        ref.Btn.TextColor3 = on and SelectedTheme.Accent or SelectedTheme.TextDark
+                        if ref.Label then
+                            ref.Label.TextColor3 = on and SelectedTheme.Accent or SelectedTheme.TextDark
+                        end
+                    end
+                end
+
+                local function FilteredOptions()
+                    if not UseSearch or SearchQuery == "" then
+                        return MasterOptions
+                    end
+                    local out = {}
+                    local q = SearchQuery:lower()
+                    for _, v in ipairs(MasterOptions) do
+                        if tostring(v):lower():find(q, 1, true) then
+                            table.insert(out, v)
+                        end
+                    end
+                    return out
+                end
+
+                local function RebuildItems()
+                    Options = FilteredOptions()
                     for _, v in pairs(Container:GetChildren()) do
                         if v:IsA("TextButton") then
                             v:Destroy()
                         end
                     end
-                    
-                    local found = false
-                    for _, v in pairs(Options) do
-                        if v == Selected then
-                            found = true
-                            break
+                    ItemRefs = {}
+
+                    if not IsMulti then
+                        local found = false
+                        for _, v in pairs(Options) do
+                            if v == Selected then
+                                found = true
+                                break
+                            end
                         end
-                    end
-                    
-                    if found then
-                        Title.Text = (Cfg.Name or "Dropdown") .. " - " .. tostring(Selected)
-                    else
-                        Selected = nil
-                        Title.Text = Cfg.Name or "Dropdown"
+                        if found then
+                            Title.Text = DisplayText(Selected)
+                        else
+                            local inMaster = false
+                            for _, v in pairs(MasterOptions) do
+                                if v == Selected then
+                                    inMaster = true
+                                    break
+                                end
+                            end
+                            if not inMaster then
+                                Selected = nil
+                                Title.Text = DisplayText(nil)
+                            end
+                        end
                     end
 
                     for _, item in pairs(Options) do
@@ -3004,7 +2978,6 @@ function Elements:CreateDropdown(Cfg)
                             })
                             table.insert(Library.ThemeObjects.TextDark, ItemLabel)
 
-                            -- @KullaniciAdi kalıbından kullanıcıyı yakala ve avatarını asenkron yükle
                             local uName = itemText:match("@([%w_]+)")
                             if uName then
                                 task.spawn(function()
@@ -3039,17 +3012,51 @@ function Elements:CreateDropdown(Cfg)
                             end
                         end)
                         Btn.MouseButton1Click:Connect(function()
-                            Update(item)
-                            Expanded = false
-                            TS:Create(Drop, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 34)}):Play()
-                            TS:Create(Arrow, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Rotation = 0}):Play()
+                            if IsMulti then
+                                local newSel = {}
+                                if type(Selected) == "table" then
+                                    for k, v in pairs(Selected) do
+                                        newSel[k] = v
+                                    end
+                                end
+                                if newSel[item] then
+                                    newSel[item] = nil
+                                else
+                                    newSel[item] = true
+                                end
+                                Update(newSel)
+                                ApplyMultiVisuals()
+                            else
+                                Update(item)
+                                Expanded = false
+                                TS:Create(Drop, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 34)}):Play()
+                                TS:Create(Arrow, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Rotation = 0}):Play()
+                            end
                         end)
+
+                        ItemRefs[item] = { Btn = Btn, Label = ItemLabel }
                     end
+
                     local stepH = PlayerIcons and 34 or 32
-                    Container.CanvasSize = UDim2.new(0, 0, 0, #Options * stepH + 10)
+                    local extra = UseSearch and 30 or 0
+                    Container.CanvasSize = UDim2.new(0, 0, 0, #Options * stepH + 10 + extra)
+                    ApplyMultiVisuals()
                 end
-                
-                RefreshList(Options)
+
+                local function RefreshList(newOptions)
+                    MasterOptions = newOptions or MasterOptions
+                    RebuildItems()
+                end
+
+                if SearchBox then
+                    SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+                        SearchQuery = SearchBox.Text
+                        RebuildItems()
+                    end)
+                end
+
+                Title.Text = DisplayText(Selected)
+                RebuildItems()
                 
                 if Cfg.Default and Cfg.Callback then
                     task.spawn(Cfg.Callback, Selected)
@@ -3061,7 +3068,8 @@ function Elements:CreateDropdown(Cfg)
                     end
                     Expanded = not Expanded
                     local stepH = PlayerIcons and 34 or 32
-                    local H = Expanded and math.min(#Options * stepH + 44, 200) or 34
+                    local extra = UseSearch and 30 or 0
+                    local H = Expanded and math.min(#Options * stepH + 44 + extra, 200) or 34
                     TS:Create(Drop, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, H)}):Play()
                     TS:Create(Arrow, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Rotation = Expanded and 180 or 0}):Play()
                     TS:Create(Container, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 1, -34)}):Play()
@@ -3069,230 +3077,15 @@ function Elements:CreateDropdown(Cfg)
                 
                 Library.Items[Flag] = {
                     Set = Update,
-                    Refresh = function(list) RefreshList(list) end,
-                    Get = function() return Selected end
+                    Refresh = function(self, list) RefreshList(list) end,
+                    Get = function() return Selected end,
+                    SetVisible = function(self, vis)
+                        Drop.Visible = vis and true or false
+                    end
                 }
                 
                 return Library.Items[Flag]
             end
-
-            function Elements:CreateMultiDropdown(Cfg)
-                ElementOrder = ElementOrder + 1
-                local Flag = Cfg.Flag or Cfg.Name
-                local Expanded = false
-                local Selected = {}
-                local Options = Cfg.Items or {}
-                if Cfg.Default then
-                    if type(Cfg.Default) == "table" then
-                        for _, v in pairs(Cfg.Default) do
-                            if type(v) == "string" then
-                                Selected[v] = true
-                            else
-                                for k, on in pairs(Cfg.Default) do
-                                    if on then Selected[k] = true end
-                                end
-                                break
-                            end
-                        end
-                    end
-                end
-                Library.Flags[Flag] = Selected
-
-                local Drop = Create("TextButton", {
-                    Parent = TargetParent,
-                    Size = UDim2.new(1, 0, 0, 34),
-                    BackgroundColor3 = SelectedTheme.Second,
-                    BackgroundTransparency = 0.5,
-                    Text = "",
-                    AutoButtonColor = false,
-                    ClipsDescendants = true,
-                    ZIndex = 7,
-                    LayoutOrder = ElementOrder,
-                    ThemeTag = "Second"
-                })
-                AddCorner(Drop, 8)
-                AddStroke(Drop, SelectedTheme).Transparency = 0.8
-                DefaultHover(Drop)
-
-                local Title = Create("TextLabel", {
-                    Parent = Drop,
-                    Size = UDim2.new(1, -40, 0, 34),
-                    Position = UDim2.new(0, 12, 0, 0),
-                    BackgroundTransparency = 1,
-                    Text = Cfg.Name or "Dropdown",
-                    Font = Library.GlobalFont,
-                    TextColor3 = SelectedTheme.Text,
-                    TextSize = 14,
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                    ZIndex = 8,
-                    TextTruncate = Enum.TextTruncate.AtEnd,
-                    ThemeTag = "Text"
-                })
-
-                local Arrow = Create("ImageLabel", {
-                    Parent = Drop,
-                    Size = UDim2.new(0, 16, 0, 16),
-                    Position = UDim2.new(1, -28, 0, 9),
-                    BackgroundTransparency = 1,
-                    Image = "rbxassetid://6031091004",
-                    ImageColor3 = SelectedTheme.TextDark,
-                    ZIndex = 8
-                })
-                table.insert(Library.ThemeObjects.TextDark, Arrow)
-
-                local Container = Create("ScrollingFrame", {
-                    Parent = Drop,
-                    Size = UDim2.new(1, 0, 0, 0),
-                    Position = UDim2.new(0, 0, 0, 34),
-                    BackgroundTransparency = 1,
-                    ZIndex = 8,
-                    ScrollBarThickness = 2,
-                    ScrollBarImageColor3 = SelectedTheme.TextDark,
-                    BorderSizePixel = 0,
-                    CanvasSize = UDim2.new(0, 0, 0, 0)
-                })
-                Create("UIPadding", {
-                    Parent = Container,
-                    PaddingTop = UDim.new(0, 5),
-                    PaddingBottom = UDim.new(0, 5),
-                    PaddingLeft = UDim.new(0, 8),
-                    PaddingRight = UDim.new(0, 8)
-                })
-                local ListLayout = Create("UIListLayout", { Parent = Container, Padding = UDim.new(0, 4) })
-
-                local function Summary()
-                    local parts = {}
-                    for _, v in ipairs(Options) do
-                        if Selected[v] then
-                            table.insert(parts, tostring(v))
-                        end
-                    end
-                    if #parts == 0 then
-                        Title.Text = (Cfg.Name or "Dropdown")
-                    else
-                        Title.Text = (Cfg.Name or "Dropdown") .. " - " .. table.concat(parts, ", ")
-                    end
-                end
-
-                local function Fire()
-                    Library.Flags[Flag] = Selected
-                    Summary()
-                    if Cfg.Callback then
-                        task.spawn(Cfg.Callback, Selected)
-                    end
-                end
-
-                local itemButtons = {}
-
-                local function RefreshList(newOptions)
-                    Options = newOptions or Options
-                    for _, v in pairs(Container:GetChildren()) do
-                        if v:IsA("TextButton") then
-                            v:Destroy()
-                        end
-                    end
-                    itemButtons = {}
-                    for _, item in pairs(Options) do
-                        local itemText = tostring(item)
-                        local Btn = Create("TextButton", {
-                            Parent = Container,
-                            Size = UDim2.new(1, 0, 0, 28),
-                            BackgroundColor3 = SelectedTheme.Main,
-                            BackgroundTransparency = 0.8,
-                            Text = "",
-                            Font = Library.GlobalFont,
-                            TextColor3 = SelectedTheme.TextDark,
-                            TextSize = 13,
-                            ZIndex = 9,
-                            TextXAlignment = Enum.TextXAlignment.Left,
-                            AutoButtonColor = false,
-                            ThemeTag = "Main"
-                        })
-                        AddCorner(Btn, 6)
-
-                        local Check = Create("Frame", {
-                            Parent = Btn,
-                            Size = UDim2.new(0, 14, 0, 14),
-                            Position = UDim2.new(0, 8, 0.5, -7),
-                            BackgroundColor3 = Selected[item] and SelectedTheme.ElementAccent or Color3.new(0, 0, 0),
-                            BackgroundTransparency = Selected[item] and 0 or 0.6,
-                            BorderSizePixel = 0,
-                            ZIndex = 10
-                        })
-                        AddCorner(Check, 4)
-
-                        local Lab = Create("TextLabel", {
-                            Parent = Btn,
-                            Size = UDim2.new(1, -36, 1, 0),
-                            Position = UDim2.new(0, 30, 0, 0),
-                            BackgroundTransparency = 1,
-                            Text = itemText,
-                            Font = Library.GlobalFont,
-                            TextColor3 = Selected[item] and SelectedTheme.Text or SelectedTheme.TextDark,
-                            TextSize = 13,
-                            TextXAlignment = Enum.TextXAlignment.Left,
-                            TextTruncate = Enum.TextTruncate.AtEnd,
-                            ZIndex = 10,
-                            ThemeTag = "TextDark"
-                        })
-
-                        itemButtons[item] = { Btn = Btn, Check = Check, Lab = Lab }
-
-                        Btn.MouseButton1Click:Connect(function()
-                            Selected[item] = not Selected[item] or nil
-                            local on = Selected[item] == true
-                            pcall(function()
-                                Check.BackgroundColor3 = on and SelectedTheme.ElementAccent or Color3.new(0, 0, 0)
-                                Check.BackgroundTransparency = on and 0 or 0.6
-                                Lab.TextColor3 = on and SelectedTheme.Text or SelectedTheme.TextDark
-                            end)
-                            Fire()
-                        end)
-                    end
-                    local stepH = 32
-                    Container.CanvasSize = UDim2.new(0, 0, 0, #Options * stepH + 10)
-                    Summary()
-                end
-
-                RefreshList(Options)
-                Fire()
-
-                Drop.MouseButton1Click:Connect(function()
-                    Expanded = not Expanded
-                    local H = Expanded and math.min(#Options * 32 + 44, 220) or 34
-                    TS:Create(Drop, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Size = UDim2.new(1, 0, 0, H) }):Play()
-                    TS:Create(Arrow, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Rotation = Expanded and 180 or 0 }):Play()
-                    TS:Create(Container, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Size = UDim2.new(1, 0, 1, -34) }):Play()
-                end)
-
-                Library.Items[Flag] = {
-                    Set = function(val)
-                        if type(val) ~= "table" then return end
-                        table.clear(Selected)
-                        for k, v in pairs(val) do
-                            if type(k) == "number" then
-                                Selected[v] = true
-                            elseif v then
-                                Selected[k] = true
-                            end
-                        end
-                        for item, parts in pairs(itemButtons) do
-                            local on = Selected[item] == true
-                            pcall(function()
-                                parts.Check.BackgroundColor3 = on and SelectedTheme.ElementAccent or Color3.new(0, 0, 0)
-                                parts.Check.BackgroundTransparency = on and 0 or 0.6
-                                parts.Lab.TextColor3 = on and SelectedTheme.Text or SelectedTheme.TextDark
-                            end)
-                        end
-                        Fire()
-                    end,
-                    Refresh = function(self, list) RefreshList(list) end,
-                    Get = function() return Selected end
-                }
-
-                return Library.Items[Flag]
-            end
-
             function Elements:CreateColorPicker(Cfg)
                 ElementOrder = ElementOrder + 1
                 local Flag = Cfg.Flag or Cfg.Name
@@ -3566,6 +3359,9 @@ function Elements:CreateDropdown(Cfg)
                             Update(t)
                         end
                     end
+                    ,SetVisible = function(self, vis)
+                        box.Visible = vis and true or false
+                    end
                 }
             end
 
@@ -3674,6 +3470,9 @@ function Elements:CreateDropdown(Cfg)
                             Update(Enum.KeyCode[keyName])
                         end
                     end
+                    ,SetVisible = function(self, vis)
+                        Frame.Visible = vis and true or false
+                    end
                 }
             end
 
@@ -3757,9 +3556,7 @@ function Elements:CreateDropdown(Cfg)
                 Create("UIListLayout", { Parent = BlockContent, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 6) })
                 Create("UIPadding", { Parent = BlockContent, PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 10), PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) })
                 
-                local BlockElements = GetElements(BlockContent)
-                BlockElements.BlockContent = BlockContent
-                return BlockElements
+                return GetElements(BlockContent)
             end
         end
         
