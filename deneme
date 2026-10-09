@@ -18,7 +18,7 @@ local CurrentFPS = 60
 local Frames = 0
 local LastTick = os.clock()
 
-RS.Heartbeat:Connect(function()
+local FPSConnection = RS.Heartbeat:Connect(function()
     Frames = Frames + 1
     local Now = os.clock()
     if Now - LastTick >= 1 then
@@ -39,6 +39,8 @@ local KeyMap = {
 
 Library.Flags = {}
 Library.Items = {}
+Library.Connections = {FPSConnection}
+Library.Unloaded = false
 Library.TextObjects = {} 
 Library.GradientObjects = {} 
 Library.CornerObjects = {}
@@ -55,6 +57,40 @@ Library.ThemeObjects = {
 }
 
 Library.ThemeFolder = "SolarisUI-Themes"
+
+local function TrackConnection(connection)
+    if connection then
+        table.insert(Library.Connections, connection)
+    end
+    return connection
+end
+
+function Library:Unload()
+    if self.Unloaded then return end
+    self.Unloaded = true
+
+    local activeBooleanFlags = {}
+    for flag, value in pairs(self.Flags or {}) do
+        if type(value) == "boolean" and value then
+            table.insert(activeBooleanFlags, flag)
+        end
+    end
+    for _, flag in ipairs(activeBooleanFlags) do
+        local item = self.Items and self.Items[flag]
+        if item and type(item.Set) == "function" then
+            pcall(item.Set, false)
+        end
+    end
+
+    for _, connection in ipairs(self.Connections or {}) do
+        pcall(function() connection:Disconnect() end)
+    end
+    self.Connections = {}
+
+    local gui = self.ScreenGui
+    self.ScreenGui = nil
+    if gui then pcall(function() gui:Destroy() end) end
+end
 
 local AvailableFonts = {
     "Gotham", "GothamBold", "SourceSans", "SourceSansBold", 
@@ -754,12 +790,13 @@ local function MakeDraggable(topbar, frame)
             dragInput = input
         end 
     end)
-    UIS.InputChanged:Connect(function(input)
+    TrackConnection(UIS.InputChanged:Connect(function(input)
+        if Library.Unloaded or not frame.Parent then return end
         if input == dragInput and dragging then
             local delta = input.Position - dragStart
             TS:Create(frame, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)}):Play()
         end
-    end)
+    end))
 end
 
 local function MakeResizable(handle, frame, minSize, maxSize)
@@ -781,7 +818,8 @@ local function MakeResizable(handle, frame, minSize, maxSize)
         end
     end)
     
-    UIS.InputChanged:Connect(function(input)
+    TrackConnection(UIS.InputChanged:Connect(function(input)
+        if Library.Unloaded or not frame.Parent then return end
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
             local newX = math.clamp(startSize.X + delta.X, MinSize.X, MaxSize.X)
@@ -796,7 +834,7 @@ local function MakeResizable(handle, frame, minSize, maxSize)
                 )
             }):Play()
         end
-    end)
+    end))
 end
 
 local function AttachHorizontalScroll(box, scrollingFrame, defaultAlignment)
@@ -1088,6 +1126,7 @@ end
 
 function Library:CreateWindow(Settings)
     local Config = Settings or {}
+    Library.Unloaded = false
     local Title = Config.Title or "UI"
     local SelectedTheme = GetTheme(Config.Theme)
     
@@ -1139,6 +1178,7 @@ function Library:CreateWindow(Settings)
         ResetOnSpawn = false,
         DisplayOrder = 10000
     })
+    Library.ScreenGui = ScreenGui
     
     if RS:IsStudio() then
         ScreenGui.Parent = LP:WaitForChild("PlayerGui")
@@ -1552,7 +1592,7 @@ function Library:CreateWindow(Settings)
     end
     local Camera = workspace.CurrentCamera
     local VP = Camera and Camera.ViewportSize or Vector2.new(1024, 768)
-    local WindowSizeX = math.min(800, math.max(280, VP.X - 32))
+    local WindowSizeX = math.min(720, math.max(280, VP.X - 32))
     local WindowSizeY = math.min(640, math.max(320, VP.Y - 32))
     local WindowSize = UDim2.fromOffset(WindowSizeX, WindowSizeY)
     local ResizeMin = Vector2.new(math.min(560, WindowSizeX), math.min(420, WindowSizeY))
@@ -1609,11 +1649,11 @@ function Library:CreateWindow(Settings)
     
     AddCorner(Main, 14)
     local WindowStroke = AddStroke(Main, SelectedTheme)
-    WindowStroke.Color = Color3.fromRGB(47, 47, 47)
-    WindowStroke.Transparency = 0.28
+    WindowStroke.Color = SelectedTheme.ElementAccent
+    WindowStroke.Transparency = 0.38
     local WindowStrokeGradient = WindowStroke:FindFirstChildOfClass("UIGradient")
     if WindowStrokeGradient then
-        WindowStrokeGradient.Color = ColorSequence.new(Color3.fromRGB(45, 45, 45), Color3.fromRGB(70, 70, 70))
+        WindowStrokeGradient.Color = ColorSequence.new(SelectedTheme.ElementAccent, SelectedTheme.ElementAccent)
     end
     
     TS:Create(WindowContainer, TweenInfo.new(0.7, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = WindowSize}):Play()
@@ -1979,8 +2019,8 @@ function Library:CreateWindow(Settings)
         MobileBtn.MouseButton1Click:Connect(ToggleUI)
     end
 
-    UIS.InputBegan:Connect(function(input, gpe)
-        if gpe or UIS:GetFocusedTextBox() then
+    TrackConnection(UIS.InputBegan:Connect(function(input, gpe)
+        if Library.Unloaded or gpe or UIS:GetFocusedTextBox() then
             return
         end
         
@@ -1995,7 +2035,7 @@ function Library:CreateWindow(Settings)
         if input.KeyCode == currentToggle then 
             ToggleUI()
         end
-    end)
+    end))
     
     local TabCount = 0
     local ActiveTab = nil
@@ -2355,6 +2395,75 @@ function Library:CreateWindow(Settings)
                 return Frame
             end
 
+            function Elements:CreateProfile(Cfg)
+                ElementOrder = ElementOrder + 1
+                Cfg = Cfg or {}
+                local ImageSize = math.clamp(tonumber(Cfg.ImageSize) or 108, 72, 150)
+                local FrameHeight = ImageSize + 44
+                local Frame = Create("Frame", {
+                    Parent = TargetParent,
+                    Size = UDim2.new(1, 0, 0, FrameHeight),
+                    BackgroundTransparency = 1,
+                    LayoutOrder = ElementOrder,
+                    ZIndex = 7
+                })
+
+                local AvatarHolder = Create("Frame", {
+                    Parent = Frame,
+                    Size = UDim2.fromOffset(ImageSize, ImageSize),
+                    Position = UDim2.new(0.5, -ImageSize / 2, 0, 2),
+                    BackgroundColor3 = SelectedTheme.Second,
+                    BackgroundTransparency = 0,
+                    BorderSizePixel = 0,
+                    ZIndex = 8,
+                    ThemeTag = "Second"
+                })
+                AddCorner(AvatarHolder, 100)
+                AddStroke(AvatarHolder, SelectedTheme).Transparency = 0.35
+
+                local Avatar = Create("ImageLabel", {
+                    Parent = AvatarHolder,
+                    Size = UDim2.new(1, -4, 1, -4),
+                    Position = UDim2.fromOffset(2, 2),
+                    BackgroundTransparency = 1,
+                    ImageColor3 = Color3.new(1, 1, 1),
+                    ScaleType = Enum.ScaleType.Crop,
+                    ZIndex = 9
+                })
+                SetImageAsync(Avatar, "Image", Cfg.Image or "")
+                AddCorner(Avatar, 100)
+
+                Create("TextLabel", {
+                    Parent = Frame,
+                    Size = UDim2.new(1, -12, 0, 18),
+                    Position = UDim2.new(0, 6, 0, ImageSize + 4),
+                    BackgroundTransparency = 1,
+                    Text = tostring(Cfg.DisplayName or LP.DisplayName or LP.Name),
+                    Font = Library.GlobalFontBold,
+                    TextColor3 = SelectedTheme.Text,
+                    TextSize = 14,
+                    TextXAlignment = Enum.TextXAlignment.Center,
+                    TextTruncate = Enum.TextTruncate.AtEnd,
+                    ZIndex = 8,
+                    ThemeTag = "Text"
+                })
+                Create("TextLabel", {
+                    Parent = Frame,
+                    Size = UDim2.new(1, -12, 0, 16),
+                    Position = UDim2.new(0, 6, 0, ImageSize + 22),
+                    BackgroundTransparency = 1,
+                    Text = "@" .. tostring(Cfg.Username or LP.Name),
+                    Font = Library.GlobalFont,
+                    TextColor3 = SelectedTheme.TextDark,
+                    TextSize = 11,
+                    TextXAlignment = Enum.TextXAlignment.Center,
+                    TextTruncate = Enum.TextTruncate.AtEnd,
+                    ZIndex = 8,
+                    ThemeTag = "TextDark"
+                })
+                return Avatar
+            end
+
             function Elements:CreateParagraph(Cfg)
                 ElementOrder = ElementOrder + 1
                 Cfg = Cfg or {}
@@ -2666,18 +2775,18 @@ function Library:CreateWindow(Settings)
                     end
                 end)
                 
-                UIS.InputEnded:Connect(function(i)
+                TrackConnection(UIS.InputEnded:Connect(function(i)
                     if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
                         Dragging = false
                         TS:Create(Thumb, TweenInfo.new(0.2), {Size = UDim2.new(0, 4, 0, 16), Position = UDim2.new(1, -4, 0.5, -8)}):Play()
                     end
-                end)
+                end))
                 
-                UIS.InputChanged:Connect(function(i)
+                TrackConnection(UIS.InputChanged:Connect(function(i)
                     if Dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
                         DragUpdate(i)
                     end
-                end)
+                end))
                 
                 ValLbl.FocusLost:Connect(function()
                     local number = tonumber(ValLbl.Text)
@@ -3247,13 +3356,13 @@ function Elements:CreateDropdown(Cfg)
                 
                 local function StartDragging()
                     if not dragConnection then
-                        dragConnection = RS.RenderStepped:Connect(function()
+                        dragConnection = TrackConnection(RS.RenderStepped:Connect(function()
                             if draggingSV then
                                 VisualUpdate(nil, math.clamp((Mouse.X - SVMap.AbsolutePosition.X) / SVMap.AbsoluteSize.X, 0, 1), 1 - math.clamp((Mouse.Y - SVMap.AbsolutePosition.Y) / SVMap.AbsoluteSize.Y, 0, 1))
                             elseif draggingHue then
                                 VisualUpdate(math.clamp((Mouse.X - HueBar.AbsolutePosition.X) / HueBar.AbsoluteSize.X, 0, 1), nil, nil)
                             end
-                        end)
+                        end))
                     end
                 end
 
@@ -3278,13 +3387,13 @@ function Elements:CreateDropdown(Cfg)
                     end
                 end)
                 
-                UIS.InputEnded:Connect(function(i)
+                TrackConnection(UIS.InputEnded:Connect(function(i)
                     if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
                         draggingSV = false
                         draggingHue = false
                         StopDragging()
                     end
-                end)
+                end))
                 
                 Library.Items[Flag] = {
                     Set = function(t)
@@ -3380,8 +3489,8 @@ function Elements:CreateDropdown(Cfg)
                 end)
                 
                 local Connection
-                Connection = UIS.InputBegan:Connect(function(input, gpe) 
-                    if not Frame.Parent then
+                Connection = TrackConnection(UIS.InputBegan:Connect(function(input, gpe) 
+                    if Library.Unloaded or not Frame.Parent then
                         Connection:Disconnect()
                         return
                     end 
@@ -3394,7 +3503,7 @@ function Elements:CreateDropdown(Cfg)
                     elseif input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode ~= Enum.KeyCode.Unknown then 
                         Update(input.KeyCode) 
                     end 
-                end)
+                end))
                 
                 Library.Items[Flag] = {
                     Set = function(keyName)
@@ -3431,7 +3540,7 @@ function Elements:CreateDropdown(Cfg)
                 AddCorner(BlockFrame, 9)
 
                 local BlockStroke = Create("UIStroke", { Parent = BlockFrame, Color = Color3.fromRGB(48, 48, 48), Transparency = 0.3, Thickness = 1 })
-                local BlockGrad = Create("UIGradient", { Parent = BlockStroke, Color = ColorSequence.new(Color3.fromRGB(45, 45, 45), Color3.fromRGB(62, 62, 62)) })
+                local BlockGrad = Create("UIGradient", { Parent = BlockStroke, Color = ColorSequence.new(SelectedTheme.ElementAccent, SelectedTheme.ElementAccent) })
                 table.insert(Library.GradientObjects, BlockGrad)
                 
                 Create("Frame", {
