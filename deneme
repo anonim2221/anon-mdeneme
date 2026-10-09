@@ -759,7 +759,7 @@ end
 
 local function MakeResizable(handle, frame)
     local dragging, dragStart, startSize
-    local MinSize = Vector2.new(480, 360)
+    local MinSize = Vector2.new(500, 350)
     local MaxSize = Vector2.new(1000, 800)
     
     handle.InputBegan:Connect(function(input)
@@ -1074,7 +1074,6 @@ end
 
 function Library:CreateWindow(Settings)
     local Config = Settings or {}
-    local AnimateWindow = Config.AnimateWindow ~= false
     local Title = Config.Title or "UI"
     local SelectedTheme = GetTheme(Config.Theme)
     
@@ -1593,15 +1592,9 @@ function Library:CreateWindow(Settings)
     AddCorner(Main, 12)
     AddStroke(Main, SelectedTheme)
     
-    if AnimateWindow then
-        TS:Create(WindowContainer, TweenInfo.new(0.7, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = WindowSize}):Play()
-        TS:Create(Shadow1, TweenInfo.new(0.7), {ImageTransparency = 0.35}):Play()
-        TS:Create(Shadow2, TweenInfo.new(0.7), {ImageTransparency = 0.4}):Play()
-    else
-        WindowContainer.Size = WindowSize
-        Shadow1.ImageTransparency = 0.35
-        Shadow2.ImageTransparency = 0.4
-    end
+    TS:Create(WindowContainer, TweenInfo.new(0.7, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = WindowSize}):Play()
+    TS:Create(Shadow1, TweenInfo.new(0.7), {ImageTransparency = 0.35}):Play()
+    TS:Create(Shadow2, TweenInfo.new(0.7), {ImageTransparency = 0.4}):Play()
 
     local ResizeBtn = Create("TextButton", {
         Parent = Main,
@@ -1844,36 +1837,23 @@ function Library:CreateWindow(Settings)
     local IsOpen, LastSize = true, WindowSize
     
     local function ToggleUI()
-        IsOpen = not IsOpen
-        if not AnimateWindow then
-            if IsOpen then
-                WindowContainer.Visible = true
-                WindowContainer.Size = LastSize
-                Shadow1.ImageTransparency = 0.35
-                Shadow2.ImageTransparency = 0.4
-            else
-                LastSize = WindowContainer.Size
-                WindowContainer.Size = UDim2.new(0, 0, 0, 0)
-                Shadow1.ImageTransparency = 1
-                Shadow2.ImageTransparency = 1
-                WindowContainer.Visible = false
-            end
-            return
-        end
-        if IsOpen then
-            WindowContainer.Visible = true
-            TS:Create(WindowContainer, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = LastSize}):Play()
+        IsOpen = not IsOpen 
+        if IsOpen then 
+            WindowContainer.Visible = true 
+            TS:Create(WindowContainer, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = LastSize}):Play() 
             TS:Create(Shadow1, TweenInfo.new(0.6), {ImageTransparency = 0.35}):Play()
             TS:Create(Shadow2, TweenInfo.new(0.6), {ImageTransparency = 0.4}):Play()
-        else
-            LastSize = WindowContainer.Size
+        else 
+            LastSize = WindowContainer.Size 
             local close = TS:Create(WindowContainer, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, 0)})
-            close:Play()
+            close:Play() 
             TS:Create(Shadow1, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {ImageTransparency = 1}):Play()
             TS:Create(Shadow2, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {ImageTransparency = 1}):Play()
             close.Completed:Connect(function()
-                if not IsOpen then WindowContainer.Visible = false end
-            end)
+                if not IsOpen then
+                    WindowContainer.Visible = false
+                end
+            end) 
         end
     end
 
@@ -1920,16 +1900,6 @@ function Library:CreateWindow(Settings)
     local TabCount = 0
     local ActiveTab = nil
     local Funcs = {}
-
-    function Funcs:Unload()
-        for _, item in pairs(Library.Items) do
-            if item and item.Set then
-                local value = item.Get and item.Get() or item.Value
-                if value == true then pcall(item.Set, false) end
-            end
-        end
-        if ScreenGui and ScreenGui.Parent then ScreenGui:Destroy() end
-    end
 
     function Funcs:CreateTab(TabName, Two_Column, ImageID)
         TabCount = TabCount + 1
@@ -2730,11 +2700,7 @@ function Elements:CreateDropdown(Cfg)
                 ElementOrder = ElementOrder + 1
                 local Flag = Cfg.Flag or Cfg.Name
                 local Expanded = false
-                local Multi = Cfg.Multi == true
-                local Selected = Multi and {} or Cfg.Default
-                if Multi and type(Cfg.Default) == "table" then
-                    for key, value in pairs(Cfg.Default) do if value then Selected[key] = true end end
-                end
+                local Selected = Cfg.Default
                 local Options = Cfg.Items or {}
                 local PlayerIcons = Cfg.PlayerIcons == true -- Oyuncu profil desteği
                 
@@ -2803,25 +2769,13 @@ function Elements:CreateDropdown(Cfg)
                 
                 local ListLayout = Create("UIListLayout", { Parent = Container, Padding = UDim.new(0, 4) })
                 
-                local function UpdateTitle()
-                    if Multi then
-                        local count = 0
-                        for _, enabled in pairs(Selected) do if enabled then count = count + 1 end end
-                        Title.Text = (Cfg.Name or "Dropdown") .. (count > 0 and (" - " .. tostring(count) .. " selected") or "")
-                    else
-                        Title.Text = (Cfg.Name or "Dropdown") .. (Selected ~= nil and (" - " .. tostring(Selected)) or "")
+                local function Update(val) 
+                    Selected = val 
+                    Title.Text = (Cfg.Name or "Dropdown") .. " - " .. tostring(Selected) 
+                    if Cfg.Callback then
+                        Cfg.Callback(val)
                     end
-                end
-
-                local function Update(val)
-                    if Multi then
-                        Selected = type(val) == "table" and val or {}
-                    else
-                        Selected = val
-                    end
-                    UpdateTitle()
-                    if Cfg.Callback then Cfg.Callback(Selected) end
-                    Library.Flags[Flag] = Selected
+                    Library.Flags[Flag] = val
                 end
 
                 local function RefreshList(newOptions)
@@ -2832,16 +2786,20 @@ function Elements:CreateDropdown(Cfg)
                         end
                     end
                     
-                    if Multi then
-                        for selectedItem in pairs(Selected) do
-                            if not table.find(Options, selectedItem) then Selected[selectedItem] = nil end
+                    local found = false
+                    for _, v in pairs(Options) do
+                        if v == Selected then
+                            found = true
+                            break
                         end
-                    else
-                        local found = false
-                        for _, v in pairs(Options) do if v == Selected then found = true; break end end
-                        if not found then Selected = nil end
                     end
-                    UpdateTitle()
+                    
+                    if found then
+                        Title.Text = (Cfg.Name or "Dropdown") .. " - " .. tostring(Selected)
+                    else
+                        Selected = nil
+                        Title.Text = Cfg.Name or "Dropdown"
+                    end
 
                     for _, item in pairs(Options) do
                         local itemText = tostring(item)
@@ -2852,7 +2810,7 @@ function Elements:CreateDropdown(Cfg)
                             Size = UDim2.new(1, 0, 0, itemHeight),
                             Position = UDim2.new(0, 0, 0, 0),
                             BackgroundColor3 = SelectedTheme.Main,
-                            BackgroundTransparency = Multi and Selected[item] and 0.2 or 0.8,
+                            BackgroundTransparency = 0.8,
                             Text = PlayerIcons and "" or itemText,
                             Font = Library.GlobalFont,
                             TextColor3 = SelectedTheme.TextDark,
@@ -2885,7 +2843,7 @@ function Elements:CreateDropdown(Cfg)
                                 BackgroundTransparency = 1,
                                 Text = itemText,
                                 Font = Library.GlobalFont,
-                                TextColor3 = Multi and Selected[item] and SelectedTheme.Text or SelectedTheme.TextDark,
+                                TextColor3 = SelectedTheme.TextDark,
                                 TextSize = 12,
                                 TextXAlignment = Enum.TextXAlignment.Left,
                                 TextTruncate = Enum.TextTruncate.AtEnd,
@@ -2922,26 +2880,17 @@ function Elements:CreateDropdown(Cfg)
                         end)
                         Btn.MouseLeave:Connect(function()
                             if hoverTweenBtn then hoverTweenBtn:Cancel() end
-                            local selected = Multi and Selected[item] == true
-                            leaveTweenBtn = TS:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = selected and 0.2 or 0.8, TextColor3 = selected and SelectedTheme.Text or SelectedTheme.TextDark})
+                            leaveTweenBtn = TS:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.8, TextColor3 = SelectedTheme.TextDark})
                             leaveTweenBtn:Play()
                             if ItemLabel then
-                                ItemLabel.TextColor3 = selected and SelectedTheme.Text or SelectedTheme.TextDark
+                                ItemLabel.TextColor3 = SelectedTheme.TextDark
                             end
                         end)
                         Btn.MouseButton1Click:Connect(function()
-                            if Multi then
-                                Selected[item] = not Selected[item] or nil
-                                Btn.BackgroundTransparency = Selected[item] and 0.2 or 0.8
-                                Btn.TextColor3 = Selected[item] and SelectedTheme.Text or SelectedTheme.TextDark
-                                if ItemLabel then ItemLabel.TextColor3 = Selected[item] and SelectedTheme.Text or SelectedTheme.TextDark end
-                                Update(Selected)
-                            else
-                                Update(item)
-                                Expanded = false
-                                TS:Create(Drop, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 34)}):Play()
-                                TS:Create(Arrow, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Rotation = 0}):Play()
-                            end
+                            Update(item)
+                            Expanded = false
+                            TS:Create(Drop, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 34)}):Play()
+                            TS:Create(Arrow, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Rotation = 0}):Play()
                         end)
                     end
                     local stepH = PlayerIcons and 34 or 32
@@ -3783,10 +3732,6 @@ function Elements:CreateDropdown(Cfg)
             end
         end
     })
-
-    function Library:Unload()
-        Funcs:Unload()
-    end
 
     return Funcs
 end
