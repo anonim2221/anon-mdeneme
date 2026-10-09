@@ -2294,6 +2294,7 @@ function Library:CreateWindow(Settings)
 
             function Elements:CreateButton(Cfg)
                 ElementOrder = ElementOrder + 1
+                local Flag = Cfg.Flag or Cfg.Name
                 local Btn = Create("TextButton", {
                     Parent = TargetParent,
                     Size = UDim2.new(1, 0, 0, 34),
