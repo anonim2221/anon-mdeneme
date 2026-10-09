@@ -800,40 +800,43 @@ local function MakeDraggable(topbar, frame)
 end
 
 local function MakeResizable(handle, frame, minSize, maxSize)
-    local dragging, dragStart, startSize, startPosition
+    local dragging, dragStart, startSize, startPosition = false, nil, nil, nil
     local MinSize = minSize or Vector2.new(500, 350)
     local MaxSize = maxSize or Vector2.new(1000, 800)
-    
-    handle.InputBegan:Connect(function(input)
+
+    TrackConnection(handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
             startSize = frame.AbsoluteSize
             startPosition = frame.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
         end
-    end)
-    
+    end))
+
+    TrackConnection(UIS.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end))
+
     TrackConnection(UIS.InputChanged:Connect(function(input)
-        if Library.Unloaded or not frame.Parent then return end
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - dragStart
-            local newX = math.clamp(startSize.X + delta.X, MinSize.X, MaxSize.X)
-            local newY = math.clamp(startSize.Y + delta.Y, MinSize.Y, MaxSize.Y)
-            local offsetX = newX - startSize.X
-            local offsetY = newY - startSize.Y
-            TS:Create(frame, TweenInfo.new(0.05, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-                Size = UDim2.fromOffset(newX, newY),
-                Position = UDim2.new(
-                    startPosition.X.Scale, startPosition.X.Offset + offsetX / 2,
-                    startPosition.Y.Scale, startPosition.Y.Offset + offsetY / 2
-                )
-            }):Play()
-        end
+        if Library.Unloaded or not frame.Parent or not dragging then return end
+        if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
+        if not dragStart or not startSize or not startPosition then return end
+
+        local delta = input.Position - dragStart
+        local newX = math.clamp(startSize.X + delta.X, MinSize.X, MaxSize.X)
+        local newY = math.clamp(startSize.Y + delta.Y, MinSize.Y, MaxSize.Y)
+        local offsetX = newX - startSize.X
+        local offsetY = newY - startSize.Y
+
+        -- Apply directly on pointer movement so the resize grip tracks the cursor
+        -- without competing tweens; adjust the center anchor to keep the top-left fixed.
+        frame.Size = UDim2.fromOffset(newX, newY)
+        frame.Position = UDim2.new(
+            startPosition.X.Scale, startPosition.X.Offset + offsetX * frame.AnchorPoint.X,
+            startPosition.Y.Scale, startPosition.Y.Offset + offsetY * frame.AnchorPoint.Y
+        )
     end))
 end
 
@@ -1171,7 +1174,7 @@ function Library:CreateWindow(Settings)
     local SidebarX = 0
     local ContentX = SidebarWidth + 10
     local HeaderHeight = 60
-    local FooterHeight = 42
+    local FooterHeight = 22
 
     local ScreenGui = Create("ScreenGui", {
         Name = "MainUI",
@@ -1663,18 +1666,27 @@ function Library:CreateWindow(Settings)
     local ResizeBtn = Create("TextButton", {
         Name = "ResizeHandle",
         Parent = Main,
-        Size = UDim2.fromOffset(20, 20),
+        Size = UDim2.fromOffset(28, 28),
         Position = UDim2.new(1, -2, 1, -2),
         AnchorPoint = Vector2.new(1, 1),
+        BackgroundColor3 = SelectedTheme.Second,
         BackgroundTransparency = 1,
-        Text = "⤢",
-        Font = Enum.Font.Code,
-        TextColor3 = Color3.fromRGB(155, 155, 155),
-        TextSize = 16,
+        Active = true,
+        Text = "↘",
+        Font = Enum.Font.GothamBold,
+        TextColor3 = Color3.fromRGB(210, 210, 210),
+        TextSize = 21,
         AutoButtonColor = false,
-        ZIndex = 2000,
-        ThemeTag = "TextDark"
+        ZIndex = 2001,
+        ThemeTag = "Second"
     })
+    AddCorner(ResizeBtn, 5)
+    ResizeBtn.MouseEnter:Connect(function()
+        TS:Create(ResizeBtn, TweenInfo.new(0.12), {TextColor3 = SelectedTheme.ElementAccent, TextSize = 23}):Play()
+    end)
+    ResizeBtn.MouseLeave:Connect(function()
+        TS:Create(ResizeBtn, TweenInfo.new(0.12), {TextColor3 = Color3.fromRGB(210, 210, 210), TextSize = 21}):Play()
+    end)
     MakeResizable(ResizeBtn, WindowContainer, ResizeMin, ResizeMax)
 
     local ToggleUI
@@ -1815,12 +1827,25 @@ function Library:CreateWindow(Settings)
         Size = UDim2.fromOffset(34, 34),
         Position = UDim2.new(1, -39, 0.5, -17),
         BackgroundTransparency = 1,
-        Text = "✥",
+        Text = "↕",
         Font = Enum.Font.Gotham,
-        TextColor3 = Color3.fromRGB(150, 150, 150),
-        TextSize = 23,
+        TextColor3 = Color3.fromRGB(175, 175, 175),
+        TextSize = 20,
         AutoButtonColor = false,
         ZIndex = 8
+    })
+    Create("TextLabel", {
+        Name = "DragGlyphHorizontal",
+        Parent = DragHandle,
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Text = "↔",
+        Font = Enum.Font.Gotham,
+        TextColor3 = Color3.fromRGB(175, 175, 175),
+        TextSize = 20,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        ZIndex = 9
     })
     MakeDraggable(DragHandle, WindowContainer)
     DragHandle.MouseEnter:Connect(function()
@@ -1994,71 +2019,19 @@ function Library:CreateWindow(Settings)
         ZIndex = 21
     })
     Create("TextLabel", {
-        Name = "FooterPlusGlyph",
+        Name = "FooterText",
         Parent = Footer,
-        Size = UDim2.new(0, SidebarWidth, 0, FooterHeight),
-        Position = UDim2.new(0, 0, 0, 0),
-        BackgroundTransparency = 1,
-        Text = "+",
-        Font = Enum.Font.GothamBold,
-        TextColor3 = SelectedTheme.ElementAccent,
-        TextSize = 20,
-        TextXAlignment = Enum.TextXAlignment.Center,
-        TextYAlignment = Enum.TextYAlignment.Center,
-        ZIndex = 22,
-        ThemeTag = "ElementAccent"
-    })
-    Create("Frame", {
-        Name = "FooterSidebarDivider",
-        Parent = Footer,
-        Size = UDim2.new(0, 1, 1, -8),
-        Position = UDim2.new(0, SidebarWidth, 0, 4),
-        BackgroundColor3 = Color3.fromRGB(45, 45, 45),
-        BackgroundTransparency = 0.15,
-        BorderSizePixel = 0,
-        ZIndex = 22
-    })
-    Create("TextLabel", {
-        Name = "FooterTitle",
-        Parent = Footer,
-        Size = UDim2.new(1, -SidebarWidth - 12, 0, 17),
-        Position = UDim2.new(0.5, SidebarWidth / 2, 0, 2),
+        Size = UDim2.new(1, -44, 1, 0),
+        Position = UDim2.new(0.5, 0, 0, 0),
         AnchorPoint = Vector2.new(0.5, 0),
         BackgroundTransparency = 1,
         Text = Config.FooterText or ("by " .. Title),
         Font = Enum.Font.Code,
-        TextColor3 = Color3.fromRGB(150, 150, 150),
+        TextColor3 = Color3.fromRGB(125, 125, 125),
         TextSize = 11,
         TextXAlignment = Enum.TextXAlignment.Center,
-        TextTruncate = Enum.TextTruncate.AtEnd,
         ZIndex = 22
     })
-    Create("TextLabel", {
-        Name = "FooterPlayerCount",
-        Parent = Footer,
-        Size = UDim2.new(0, 100, 0, 17),
-        Position = UDim2.new(0.5, SidebarWidth / 2, 0, 21),
-        AnchorPoint = Vector2.new(0.5, 0),
-        BackgroundTransparency = 1,
-        Text = string.format("%d/%d", #Plrs:GetPlayers(), Plrs.MaxPlayers),
-        Font = Enum.Font.GothamBold,
-        TextColor3 = Color3.fromRGB(220, 220, 220),
-        TextSize = 16,
-        TextXAlignment = Enum.TextXAlignment.Center,
-        ZIndex = 22
-    })
-    TrackConnection(Plrs.PlayerAdded:Connect(function()
-        task.defer(function()
-            local label = Footer:FindFirstChild("FooterPlayerCount")
-            if label then label.Text = string.format("%d/%d", #Plrs:GetPlayers(), Plrs.MaxPlayers) end
-        end)
-    end))
-    TrackConnection(Plrs.PlayerRemoving:Connect(function()
-        task.defer(function()
-            local label = Footer:FindFirstChild("FooterPlayerCount")
-            if label then label.Text = string.format("%d/%d", #Plrs:GetPlayers(), Plrs.MaxPlayers) end
-        end)
-    end))
 
     local IsOpen, LastSize = true, WindowSize
     local ToggleSerial = 0
