@@ -1170,8 +1170,8 @@ function Library:CreateWindow(Settings)
     local SidebarWidth = CompactSidebar and 50 or 165
     local SidebarX = 0
     local ContentX = SidebarWidth + 10
-    local HeaderHeight = 50
-    local FooterHeight = 22
+    local HeaderHeight = 60
+    local FooterHeight = 42
 
     local ScreenGui = Create("ScreenGui", {
         Name = "MainUI",
@@ -1697,11 +1697,15 @@ function Library:CreateWindow(Settings)
         ZIndex = 6
     })
     
+    do
+    local HeaderSearchLeft = math.clamp(WindowSizeX * 0.43, 150, 322)
+    local HeaderTextWidth = math.max(60, HeaderSearchLeft - 70)
+
     if CustomIconID and CustomIconID ~= "" then
         local TopIcon = Create("ImageLabel", {
             Parent = TopBar,
-            Size = UDim2.fromOffset(26, 26),
-            Position = UDim2.new(0, 11, 0.5, -13),
+            Size = UDim2.fromOffset(32, 32),
+            Position = UDim2.new(0, 10, 0.5, -16),
             BackgroundTransparency = 1,
             ZIndex = 7
         })
@@ -1709,11 +1713,42 @@ function Library:CreateWindow(Settings)
         AddCorner(TopIcon, 100)
     end
 
+    Create("TextLabel", {
+        Name = "HeaderPageTitle",
+        Parent = TopBar,
+        Size = UDim2.new(0, HeaderTextWidth, 0, 17),
+        Position = UDim2.new(0, 52, 0.5, -15),
+        BackgroundTransparency = 1,
+        Text = Title,
+        Font = Enum.Font.GothamBold,
+        TextColor3 = SelectedTheme.Text,
+        TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        ZIndex = 8,
+        ThemeTag = "Text"
+    })
+    Create("TextLabel", {
+        Name = "HeaderPageSubtitle",
+        Parent = TopBar,
+        Size = UDim2.new(0, HeaderTextWidth, 0, 14),
+        Position = UDim2.new(0, 52, 0.5, 2),
+        BackgroundTransparency = 1,
+        Text = Config.HeaderSubtitle or "ANONIM HUB",
+        Font = Enum.Font.Gotham,
+        TextColor3 = SelectedTheme.TextDark,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        ZIndex = 8,
+        ThemeTag = "TextDark"
+    })
+
     local SearchFrame = Create("Frame", {
         Name = "HeaderSearch",
         Parent = TopBar,
-        Size = UDim2.new(1, -146, 0, 33),
-        Position = UDim2.new(0, 56, 0.5, -16),
+        Size = UDim2.new(1, -(HeaderSearchLeft + 80), 0, 33),
+        Position = UDim2.new(0, HeaderSearchLeft, 0.5, -16),
         BackgroundColor3 = Color3.fromRGB(23, 23, 23),
         BackgroundTransparency = 0,
         BorderSizePixel = 0,
@@ -1794,11 +1829,12 @@ function Library:CreateWindow(Settings)
     DragHandle.MouseLeave:Connect(function()
         TS:Create(DragHandle, TweenInfo.new(0.15), {TextColor3 = Color3.fromRGB(150, 150, 150)}):Play()
     end)
+    end
 
     local TabContainer = Create("ScrollingFrame", {
         Name = "SidebarTabs",
         Parent = Main,
-        Size = UDim2.new(0, SidebarWidth, 1, -166),
+        Size = UDim2.new(0, SidebarWidth, 1, -(HeaderHeight + FooterHeight + 94)),
         Position = UDim2.new(0, SidebarX, 0, HeaderHeight),
         BackgroundColor3 = SelectedTheme.Main,
         BackgroundTransparency = 0,
@@ -1835,7 +1871,7 @@ function Library:CreateWindow(Settings)
         Name = "OpenSettings",
         Parent = Main,
         Size = UDim2.new(0, SidebarWidth, 0, 34),
-        Position = UDim2.new(0, SidebarX, 1, -108),
+        Position = UDim2.new(0, SidebarX, 1, -(FooterHeight + 86)),
         BackgroundColor3 = SelectedTheme.Second,
         BackgroundTransparency = 1,
         Text = CompactSidebar and "⚙" or "GUI Settings",
@@ -1862,17 +1898,17 @@ function Library:CreateWindow(Settings)
         leaveTweenSettings:Play()
     end)
     OpenSettingsBtn.MouseButton1Down:Connect(function()
-        TS:Create(OpenSettingsBtn, TweenInfo.new(0.1), {Size = UDim2.new(0, SidebarWidth - 4, 0, 30), Position = UDim2.new(0, SidebarX + 2, 1, -106)}):Play()
+        TS:Create(OpenSettingsBtn, TweenInfo.new(0.1), {Size = UDim2.new(0, SidebarWidth - 4, 0, 30), Position = UDim2.new(0, SidebarX + 2, 1, -(FooterHeight + 84))}):Play()
     end)
     OpenSettingsBtn.MouseButton1Up:Connect(function()
-        TS:Create(OpenSettingsBtn, TweenInfo.new(0.1), {Size = UDim2.new(0, SidebarWidth, 0, 34), Position = UDim2.new(0, SidebarX, 1, -108)}):Play()
+        TS:Create(OpenSettingsBtn, TweenInfo.new(0.1), {Size = UDim2.new(0, SidebarWidth, 0, 34), Position = UDim2.new(0, SidebarX, 1, -(FooterHeight + 86))}):Play()
     end)
 
     local ProfileFrame = Create("Frame", {
         Name = "SidebarProfile",
         Parent = Main,
         Size = UDim2.new(0, SidebarWidth, 0, 36),
-        Position = UDim2.new(0, SidebarX, 1, -64),
+        Position = UDim2.new(0, SidebarX, 1, -(FooterHeight + 42)),
         BackgroundColor3 = SelectedTheme.Second,
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
@@ -1958,18 +1994,71 @@ function Library:CreateWindow(Settings)
         ZIndex = 21
     })
     Create("TextLabel", {
+        Name = "FooterPlusGlyph",
         Parent = Footer,
-        Size = UDim2.new(1, -44, 1, 0),
-        Position = UDim2.new(0.5, 0, 0, 0),
+        Size = UDim2.new(0, SidebarWidth, 0, FooterHeight),
+        Position = UDim2.new(0, 0, 0, 0),
+        BackgroundTransparency = 1,
+        Text = "+",
+        Font = Enum.Font.GothamBold,
+        TextColor3 = SelectedTheme.ElementAccent,
+        TextSize = 20,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        ZIndex = 22,
+        ThemeTag = "ElementAccent"
+    })
+    Create("Frame", {
+        Name = "FooterSidebarDivider",
+        Parent = Footer,
+        Size = UDim2.new(0, 1, 1, -8),
+        Position = UDim2.new(0, SidebarWidth, 0, 4),
+        BackgroundColor3 = Color3.fromRGB(45, 45, 45),
+        BackgroundTransparency = 0.15,
+        BorderSizePixel = 0,
+        ZIndex = 22
+    })
+    Create("TextLabel", {
+        Name = "FooterTitle",
+        Parent = Footer,
+        Size = UDim2.new(1, -SidebarWidth - 12, 0, 17),
+        Position = UDim2.new(0.5, SidebarWidth / 2, 0, 2),
         AnchorPoint = Vector2.new(0.5, 0),
         BackgroundTransparency = 1,
         Text = Config.FooterText or ("by " .. Title),
         Font = Enum.Font.Code,
-        TextColor3 = Color3.fromRGB(125, 125, 125),
+        TextColor3 = Color3.fromRGB(150, 150, 150),
         TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        ZIndex = 22
+    })
+    Create("TextLabel", {
+        Name = "FooterPlayerCount",
+        Parent = Footer,
+        Size = UDim2.new(0, 100, 0, 17),
+        Position = UDim2.new(0.5, SidebarWidth / 2, 0, 21),
+        AnchorPoint = Vector2.new(0.5, 0),
+        BackgroundTransparency = 1,
+        Text = string.format("%d/%d", #Plrs:GetPlayers(), Plrs.MaxPlayers),
+        Font = Enum.Font.GothamBold,
+        TextColor3 = Color3.fromRGB(220, 220, 220),
+        TextSize = 16,
         TextXAlignment = Enum.TextXAlignment.Center,
         ZIndex = 22
     })
+    TrackConnection(Plrs.PlayerAdded:Connect(function()
+        task.defer(function()
+            local label = Footer:FindFirstChild("FooterPlayerCount")
+            if label then label.Text = string.format("%d/%d", #Plrs:GetPlayers(), Plrs.MaxPlayers) end
+        end)
+    end))
+    TrackConnection(Plrs.PlayerRemoving:Connect(function()
+        task.defer(function()
+            local label = Footer:FindFirstChild("FooterPlayerCount")
+            if label then label.Text = string.format("%d/%d", #Plrs:GetPlayers(), Plrs.MaxPlayers) end
+        end)
+    end))
 
     local IsOpen, LastSize = true, WindowSize
     local ToggleSerial = 0
@@ -2257,6 +2346,8 @@ function Library:CreateWindow(Settings)
             local OldTab = ActiveTab
             local Direction = (OldTab and MyIndex > OldTab.Index) and "Down" or "Up"
             ActiveTab = {Btn = TabBtn, Page = Page, Index = MyIndex}
+            TopBar:FindFirstChild("HeaderPageTitle").Text = TabName
+            TopBar:FindFirstChild("HeaderPageSubtitle").Text = TabName == "Home" and "Profile, statistics" or "ANONIM HUB"
             
             for _, v in pairs(TabContainer:GetChildren()) do 
                 if v:IsA("TextButton") then 
