@@ -2144,9 +2144,14 @@ function Library:CreateWindow(Settings)
     end)
 
     -- ===== OPEN / CLOSE (Astra tarzi fade) =====
+    -- Her "FadeUnit": normalde Home icinde durur, animasyon sirasinda CanvasGroup'a alinir
     local IsOpen = false
     local CurrentFade = nil
     local FadeInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local FadeUnits = {}
+    if FadeGroup then
+        table.insert(FadeUnits, {Content = Main, Home = WindowContainer, Group = FadeGroup})
+    end
 
     local function SetWindowOpen(show)
         IsOpen = show
@@ -2160,34 +2165,110 @@ function Library:CreateWindow(Settings)
         TS:Create(Shadow2, FadeInfo, {ImageTransparency = show and 0.6 or 1}):Play()
         TS:Create(CloseX, FadeInfo, {TextTransparency = show and 0 or 1, TextStrokeTransparency = show and 0.7 or 1}):Play()
 
-        if not FadeGroup then
+        if #FadeUnits == 0 then
             WindowContainer.Visible = show
             return
         end
 
-        if Main.Parent ~= FadeGroup then
-            FadeGroup.GroupTransparency = show and 1 or 0
-            Main.Parent = FadeGroup
+        local Tweens = {}
+        for _, U in ipairs(FadeUnits) do
+            if U.Content.Parent ~= U.Group then
+                U.Group.GroupTransparency = show and 1 or 0
+                U.Content.Parent = U.Group
+            end
+            U.Group.Visible = true
+            table.insert(Tweens, TS:Create(U.Group, FadeInfo, {GroupTransparency = show and 0 or 1}))
         end
-        FadeGroup.Visible = true
 
-        local tw = TS:Create(FadeGroup, FadeInfo, {GroupTransparency = show and 0 or 1})
+        local tw = Tweens[1]
         CurrentFade = tw
         tw.Completed:Connect(function()
             if CurrentFade ~= tw then return end
             CurrentFade = nil
             if IsOpen then
-                Main.Parent = WindowContainer
-                FadeGroup.Visible = false
+                for _, U in ipairs(FadeUnits) do
+                    U.Content.Parent = U.Home
+                    U.Group.Visible = false
+                end
             else
                 WindowContainer.Visible = false
             end
         end)
-        tw:Play()
+        for i = #Tweens, 1, -1 do
+            Tweens[i]:Play()
+        end
     end
 
     local function ToggleUI()
         SetWindowOpen(not IsOpen)
+    end
+
+    -- Menu penceresine bir panel kenetler (orn. ust durum paneli).
+    -- Panel menuyle birlikte tasinir, fade ile acilir/kapanir.
+    -- Opts: Gap (px, varsayilan 8), Draggable (varsayilan true)
+    function Library:AttachToWindow(Content, Opts)
+        Opts = Opts or {}
+        local Gap = Opts.Gap or 8
+        local W = Content.Size.X.Offset
+        local H = Content.Size.Y.Offset
+
+        local Holder = Create("Frame", {
+            Name = "TopDock",
+            Parent = WindowContainer,
+            AnchorPoint = Vector2.new(0.5, 1),
+            Position = UDim2.new(0.5, 0, 0, -Gap),
+            Size = UDim2.fromOffset(W, H),
+            BackgroundTransparency = 1,
+            ZIndex = 3
+        })
+        Content.AnchorPoint = Vector2.new(0, 0)
+        Content.Position = UDim2.fromScale(0, 0)
+
+        local Group
+        pcall(function()
+            Group = Instance.new("CanvasGroup")
+            Group.Name = "DockFade"
+            Group.Size = UDim2.fromScale(1, 1)
+            Group.BackgroundTransparency = 1
+            Group.BorderSizePixel = 0
+            Group.Visible = false
+            Group.ZIndex = 3
+            Group.Parent = Holder
+        end)
+
+        if Group then
+            local U = {Content = Content, Home = Holder, Group = Group}
+            table.insert(FadeUnits, U)
+            if CurrentFade or not IsOpen then
+                -- su an animasyon/kapali durumda: ana grupla ayni seffaflikta basla
+                Group.GroupTransparency = FadeGroup and FadeGroup.GroupTransparency or (IsOpen and 0 or 1)
+                Group.Visible = true
+                Content.Parent = Group
+                if CurrentFade then
+                    TS:Create(Group, FadeInfo, {GroupTransparency = IsOpen and 0 or 1}):Play()
+                end
+            else
+                Content.Parent = Holder
+            end
+        else
+            Content.Parent = Holder
+        end
+
+        if Opts.Draggable ~= false then
+            MakeDraggable(Holder, WindowContainer)
+        end
+
+        -- Pencere + panel birlikte ekranda ortali dursun
+        local Extra = H + Gap
+        WindowContainer.Position = WindowContainer.Position + UDim2.fromOffset(0, math.floor(Extra / 2))
+        if IsMobile then
+            local maxY = VP.Y - 32 - Extra
+            if WindowContainer.Size.Y.Offset > maxY then
+                WindowContainer.Size = UDim2.fromOffset(WindowContainer.Size.X.Offset, math.max(260, maxY))
+            end
+        end
+
+        return Holder
     end
 
     SetWindowOpen(true)
