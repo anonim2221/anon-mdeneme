@@ -2143,132 +2143,92 @@ function Library:CreateWindow(Settings)
         ApplySearch()
     end)
 
-    -- ===== OPEN / CLOSE (Astra tarzi fade) =====
-    -- Her "FadeUnit": normalde Home icinde durur, animasyon sirasinda CanvasGroup'a alinir
+    -- ===== OPEN / CLOSE =====
+    -- Acilis: Astra tarzi kisa fade. Kapanis: ANINDA (tusa basinca direkt kapanir).
     local IsOpen = false
     local CurrentFade = nil
-    local FadeInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-    local FadeUnits = {}
-    if FadeGroup then
-        table.insert(FadeUnits, {Content = Main, Home = WindowContainer, Group = FadeGroup})
+    local FadeInfo = TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local ToggleCallbacks = {}
+    local OpenTweens = {}
+
+    local function FireToggleCallbacks(show)
+        for _, fn in ipairs(ToggleCallbacks) do
+            task.spawn(pcall, fn, show)
+        end
     end
 
     local function SetWindowOpen(show)
         IsOpen = show
-        if show then
-            WindowContainer.Visible = true
-        else
+
+        if not show then
+            -- ANINDA KAPAT: devam eden fade'i iptal et, her seyi direkt gizle
+            CurrentFade = nil
+            for _, t in ipairs(OpenTweens) do pcall(function() t:Cancel() end) end
+            table.clear(OpenTweens)
             Tooltip.Visible = false
-        end
-
-        TS:Create(Shadow1, FadeInfo, {ImageTransparency = show and 0.55 or 1}):Play()
-        TS:Create(Shadow2, FadeInfo, {ImageTransparency = show and 0.6 or 1}):Play()
-        TS:Create(CloseX, FadeInfo, {TextTransparency = show and 0 or 1, TextStrokeTransparency = show and 0.7 or 1}):Play()
-
-        if #FadeUnits == 0 then
-            WindowContainer.Visible = show
+            if FadeGroup and Main.Parent == FadeGroup then
+                Main.Parent = WindowContainer
+            end
+            if FadeGroup then
+                FadeGroup.Visible = false
+                FadeGroup.GroupTransparency = 1
+            end
+            Shadow1.ImageTransparency = 1
+            Shadow2.ImageTransparency = 1
+            CloseX.TextTransparency = 1
+            CloseX.TextStrokeTransparency = 1
+            WindowContainer.Visible = false
+            FireToggleCallbacks(false)
             return
         end
 
-        local Tweens = {}
-        for _, U in ipairs(FadeUnits) do
-            if U.Content.Parent ~= U.Group then
-                U.Group.GroupTransparency = show and 1 or 0
-                U.Content.Parent = U.Group
-            end
-            U.Group.Visible = true
-            table.insert(Tweens, TS:Create(U.Group, FadeInfo, {GroupTransparency = show and 0 or 1}))
-        end
+        WindowContainer.Visible = true
+        FireToggleCallbacks(true)
+        table.clear(OpenTweens)
+        table.insert(OpenTweens, TS:Create(Shadow1, FadeInfo, {ImageTransparency = 0.55}))
+        table.insert(OpenTweens, TS:Create(Shadow2, FadeInfo, {ImageTransparency = 0.6}))
+        table.insert(OpenTweens, TS:Create(CloseX, FadeInfo, {TextTransparency = 0, TextStrokeTransparency = 0.7}))
+        for _, t in ipairs(OpenTweens) do t:Play() end
 
-        local tw = Tweens[1]
+        if not FadeGroup then return end
+
+        if Main.Parent ~= FadeGroup then
+            FadeGroup.GroupTransparency = 1
+            Main.Parent = FadeGroup
+        end
+        FadeGroup.Visible = true
+
+        local tw = TS:Create(FadeGroup, FadeInfo, {GroupTransparency = 0})
         CurrentFade = tw
+        table.insert(OpenTweens, tw)
         tw.Completed:Connect(function()
             if CurrentFade ~= tw then return end
             CurrentFade = nil
             if IsOpen then
-                for _, U in ipairs(FadeUnits) do
-                    U.Content.Parent = U.Home
-                    U.Group.Visible = false
-                end
-            else
-                WindowContainer.Visible = false
+                Main.Parent = WindowContainer
+                FadeGroup.Visible = false
             end
         end)
-        for i = #Tweens, 1, -1 do
-            Tweens[i]:Play()
-        end
+        tw:Play()
     end
 
     local function ToggleUI()
         SetWindowOpen(not IsOpen)
     end
 
-    -- Menu penceresine bir panel kenetler (orn. ust durum paneli).
-    -- Panel menuyle birlikte tasinir, fade ile acilir/kapanir.
-    -- Opts: Gap (px, varsayilan 8), Draggable (varsayilan true)
-    function Library:AttachToWindow(Content, Opts)
-        Opts = Opts or {}
-        local Gap = Opts.Gap or 8
-        local W = Content.Size.X.Offset
-        local H = Content.Size.Y.Offset
-
-        local Holder = Create("Frame", {
-            Name = "TopDock",
-            Parent = WindowContainer,
-            AnchorPoint = Vector2.new(0.5, 1),
-            Position = UDim2.new(0.5, 0, 0, -Gap),
-            Size = UDim2.fromOffset(W, H),
-            BackgroundTransparency = 1,
-            ZIndex = 3
-        })
-        Content.AnchorPoint = Vector2.new(0, 0)
-        Content.Position = UDim2.fromScale(0, 0)
-
-        local Group
-        pcall(function()
-            Group = Instance.new("CanvasGroup")
-            Group.Name = "DockFade"
-            Group.Size = UDim2.fromScale(1, 1)
-            Group.BackgroundTransparency = 1
-            Group.BorderSizePixel = 0
-            Group.Visible = false
-            Group.ZIndex = 3
-            Group.Parent = Holder
-        end)
-
-        if Group then
-            local U = {Content = Content, Home = Holder, Group = Group}
-            table.insert(FadeUnits, U)
-            if CurrentFade or not IsOpen then
-                -- su an animasyon/kapali durumda: ana grupla ayni seffaflikta basla
-                Group.GroupTransparency = FadeGroup and FadeGroup.GroupTransparency or (IsOpen and 0 or 1)
-                Group.Visible = true
-                Content.Parent = Group
-                if CurrentFade then
-                    TS:Create(Group, FadeInfo, {GroupTransparency = IsOpen and 0 or 1}):Play()
-                end
-            else
-                Content.Parent = Holder
-            end
-        else
-            Content.Parent = Holder
+    -- Menu acilip kapandiginda cagrilir: fn(isOpen)
+    function Library:OnWindowToggle(fn)
+        if type(fn) == "function" then
+            table.insert(ToggleCallbacks, fn)
         end
+    end
 
-        if Opts.Draggable ~= false then
-            MakeDraggable(Holder, WindowContainer)
-        end
+    function Library:IsWindowOpen()
+        return IsOpen
+    end
 
-        -- Pencere + panel birlikte ekranda ortali dursun
-        local Extra = H + Gap
-        WindowContainer.Position = WindowContainer.Position + UDim2.fromOffset(0, math.floor(Extra / 2))
-        if IsMobile then
-            local maxY = VP.Y - 32 - Extra
-            if WindowContainer.Size.Y.Offset > maxY then
-                WindowContainer.Size = UDim2.fromOffset(WindowContainer.Size.X.Offset, math.max(260, maxY))
-            end
-        end
-
-        return Holder
+    function Library:SetWindowOpen(show)
+        SetWindowOpen(show and true or false)
     end
 
     SetWindowOpen(true)
@@ -2595,6 +2555,89 @@ function Library:CreateWindow(Settings)
                 Create("UIPadding", { Parent = Lab, PaddingLeft = UDim.new(0, 6) })
             end
 
+            -- Ayirici: ----- Yazi -----  (Astra/Obsidian tarzi)
+            function Elements:CreateDivider(Text)
+                ElementOrder = ElementOrder + 1
+                if type(Text) == "table" then Text = Text.Text or Text.Name end
+                local Holder = Create("Frame", {
+                    Parent = TargetParent,
+                    Size = UDim2.new(1, 0, 0, (Text and Text ~= "") and 18 or 8),
+                    BackgroundTransparency = 1,
+                    LayoutOrder = ElementOrder,
+                    ZIndex = 7
+                })
+                local LineColor = Library.Style and Library.Style.Outline or Color3.fromRGB(40, 40, 40)
+                local LineL = Create("Frame", {
+                    Parent = Holder,
+                    AnchorPoint = Vector2.new(0, 0.5),
+                    Position = UDim2.new(0, 2, 0.5, 0),
+                    Size = UDim2.new(1, -4, 0, 1),
+                    BackgroundColor3 = Color3.fromRGB(70, 70, 70),
+                    BackgroundTransparency = 0.3,
+                    BorderSizePixel = 0,
+                    ZIndex = 8
+                })
+                if not Text or Text == "" then
+                    return Holder
+                end
+                local LineR = Create("Frame", {
+                    Parent = Holder,
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, -2, 0.5, 0),
+                    Size = UDim2.new(0.5, -40, 0, 1),
+                    BackgroundColor3 = Color3.fromRGB(70, 70, 70),
+                    BackgroundTransparency = 0.3,
+                    BorderSizePixel = 0,
+                    ZIndex = 8
+                })
+                local Lbl = Create("TextLabel", {
+                    Parent = Holder,
+                    AnchorPoint = Vector2.new(0.5, 0.5),
+                    Position = UDim2.fromScale(0.5, 0.5),
+                    Size = UDim2.new(0, 0, 1, 0),
+                    AutomaticSize = Enum.AutomaticSize.X,
+                    BackgroundTransparency = 1,
+                    Text = tostring(Text),
+                    Font = Library.GlobalFont,
+                    TextColor3 = SelectedTheme.TextDark,
+                    TextSize = 12,
+                    ZIndex = 8,
+                    ThemeTag = "TextDark"
+                })
+                local function Relayout()
+                    local w = Lbl.AbsoluteSize.X
+                    if w <= 0 then w = (#Lbl.Text * 7) end
+                    LineL.Size = UDim2.new(0.5, -(w / 2 + 8), 0, 1)
+                    LineR.Size = UDim2.new(0.5, -(w / 2 + 8), 0, 1)
+                end
+                Lbl:GetPropertyChangedSignal("AbsoluteSize"):Connect(Relayout)
+                Relayout()
+                return Holder, Lbl
+            end
+
+            -- Bos/ozel kutu: hub icinde ozel icerik (orn. 3D karakter) koymak icin
+            -- Cfg: Height (px), Transparent (bool)
+            function Elements:CreateCustom(Cfg)
+                ElementOrder = ElementOrder + 1
+                Cfg = Cfg or {}
+                local Frame = Create("Frame", {
+                    Parent = TargetParent,
+                    Size = UDim2.new(1, 0, 0, Cfg.Height or 120),
+                    BackgroundColor3 = SelectedTheme.Second,
+                    BackgroundTransparency = Cfg.Transparent and 1 or 0.5,
+                    BorderSizePixel = 0,
+                    LayoutOrder = ElementOrder,
+                    ZIndex = 7,
+                    ClipsDescendants = true,
+                    ThemeTag = "Second"
+                })
+                AddCorner(Frame, 8)
+                if not Cfg.Transparent then
+                    AddStroke(Frame, SelectedTheme).Transparency = 0.8
+                end
+                return Frame
+            end
+
                 function Elements:CreateLabel(Cfg)
                 ElementOrder = ElementOrder + 1
                 local hasIcon = (Cfg.Icon ~= nil and Cfg.Icon ~= "")
@@ -2680,6 +2723,7 @@ function Library:CreateWindow(Settings)
 
             function Elements:CreateButton(Cfg)
                 ElementOrder = ElementOrder + 1
+                Cfg = Cfg or {}
                 local Btn = Create("TextButton", {
                     Parent = TargetParent,
                     Size = UDim2.new(1, 0, 0, 34),
@@ -2694,12 +2738,13 @@ function Library:CreateWindow(Settings)
                 AddCorner(Btn, 8)
                 AddStroke(Btn, SelectedTheme).Transparency = 0.8
 
-                Create("TextLabel", {
+                local BaseText = Cfg.Name or "Button"
+                local BtnLabel = Create("TextLabel", {
                     Parent = Btn,
                     Size = UDim2.new(1, -20, 1, 0),
                     Position = UDim2.new(0, 10, 0, 0),
                     BackgroundTransparency = 1,
-                    Text = Cfg.Name or "Button",
+                    Text = BaseText,
                     Font = Library.GlobalFontBold,
                     TextColor3 = SelectedTheme.Text,
                     TextSize = 14,
@@ -2711,15 +2756,61 @@ function Library:CreateWindow(Settings)
                 
                 CreateRipple(Btn, SelectedTheme.Accent)
                 DefaultHover(Btn)
+
+                -- DoubleClick = true -> ilk tiklamada "Are you sure?" sorar, 2 sn icinde tekrar tiklanirsa calisir
+                local Confirming = 0
+                local ButtonObj = {Instance = Btn, Label = BtnLabel}
+
+                function ButtonObj:SetText(t)
+                    BaseText = tostring(t)
+                    if Confirming == 0 then
+                        BtnLabel.Text = BaseText
+                    end
+                end
+
+                function ButtonObj:GetText()
+                    return BaseText
+                end
                 
                 Btn.MouseButton1Click:Connect(function()
                     TS:Create(Btn, TweenInfo.new(0.1), {Size = UDim2.new(1, -4, 0, 30), Position = UDim2.new(0, 2, 0, 2)}):Play()
-                    task.wait(0.1)
-                    TS:Create(Btn, TweenInfo.new(0.1), {Size = UDim2.new(1, 0, 0, 34), Position = UDim2.new(0, 0, 0, 0)}):Play()
+                    task.delay(0.1, function()
+                        TS:Create(Btn, TweenInfo.new(0.1), {Size = UDim2.new(1, 0, 0, 34), Position = UDim2.new(0, 0, 0, 0)}):Play()
+                    end)
+
+                    local NeedConfirm = Cfg.DoubleClick
+                    if type(NeedConfirm) == "function" then
+                        local ok, res = pcall(NeedConfirm)
+                        NeedConfirm = ok and res
+                    end
+
+                    if NeedConfirm and Confirming == 0 then
+                        local token = os.clock()
+                        Confirming = token
+                        BtnLabel.Text = Cfg.ConfirmText or "Are you sure?"
+                        BtnLabel.TextColor3 = SelectedTheme.ElementAccent
+                        task.delay(2, function()
+                            if Confirming == token then
+                                Confirming = 0
+                                BtnLabel.Text = BaseText
+                                BtnLabel.TextColor3 = SelectedTheme.Text
+                            end
+                        end)
+                        return
+                    end
+
+                    if Confirming ~= 0 then
+                        Confirming = 0
+                        BtnLabel.Text = BaseText
+                        BtnLabel.TextColor3 = SelectedTheme.Text
+                    end
+
                     if Cfg.Callback then
-                        Cfg.Callback()
+                        task.spawn(Cfg.Callback)
                     end
                 end)
+
+                return ButtonObj
             end
 
             function Elements:CreateToggle(Cfg)
