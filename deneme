@@ -860,6 +860,8 @@ local LucideIcons = {
     ["cloud-sun"] = {16898613044, 0, 967},
 }
 Library.LucideIcons = LucideIcons
+Library.SliderRounding = true -- CreateSlider: Cfg.Rounding destegi
+Library.DropdownMulti = true -- CreateDropdown: Cfg.Multi destegi
 
 -- Tab ismine gore otomatik Astra ikonlari (CreateTab'e lucide ismi de verilebilir)
 local AstraTabIcons = {
@@ -3159,6 +3161,13 @@ function Library:CreateWindow(Settings)
                 local Val = Cfg.Default or Cfg.Min
                 local Flag = Cfg.Flag or Cfg.Name
                 Library.Flags[Flag] = Val
+                -- Rounding (opsiyonel): ondalikli slider. Verilmezse eski davranis (tam sayi).
+                local Rounding = math.max(0, math.floor(tonumber(Cfg.Rounding) or 0))
+                local function RoundVal(v)
+                    if Rounding <= 0 then return v end
+                    local m = 10 ^ Rounding
+                    return math.floor(v * m + 0.5) / m
+                end
                 
                 local Frame = Create("Frame", {
                     Parent = TargetParent,
@@ -3271,7 +3280,11 @@ function Library:CreateWindow(Settings)
                 
                 local function DragUpdate(input)
                     local p = math.clamp((input.Position.X - SlideBar.AbsolutePosition.X) / SlideBar.AbsoluteSize.X, 0, 1)
-                    Update(math.floor(Min + ((Max - Min) * p)))
+                    if Rounding > 0 then
+                        Update(RoundVal(Min + ((Max - Min) * p)))
+                    else
+                        Update(math.floor(Min + ((Max - Min) * p)))
+                    end
                 end
                 
                 SlideBar.InputBegan:Connect(function(i)
@@ -3298,7 +3311,7 @@ function Library:CreateWindow(Settings)
                 ValLbl.FocusLost:Connect(function()
                     local number = tonumber(ValLbl.Text)
                     if number then
-                        Update(number)
+                        Update(RoundVal(number))
                     else
                         ValLbl.Text = tostring(Val)
                     end
@@ -3416,6 +3429,32 @@ function Elements:CreateDropdown(Cfg)
                 local Selected = Cfg.Default
                 local Options = Cfg.Items or {}
                 local PlayerIcons = Cfg.PlayerIcons == true -- Oyuncu profil desteği
+                -- Multi (opsiyonel): coklu secim. Selected = {[item] = true}
+                local Multi = Cfg.Multi == true
+                local function MultiCopy(src)
+                    local out = {}
+                    if type(src) == "table" then
+                        for k, v in pairs(src) do
+                            if type(k) == "number" and type(v) ~= "boolean" then
+                                out[v] = true
+                            elseif v then
+                                out[k] = true
+                            end
+                        end
+                    end
+                    return out
+                end
+                local function MultiText()
+                    local names = {}
+                    for _, it in ipairs(Options) do
+                        if Selected[it] then names[#names + 1] = tostring(it) end
+                    end
+                    if #names == 0 then return Cfg.Name or "Dropdown" end
+                    return (Cfg.Name or "Dropdown") .. " - " .. table.concat(names, ", ")
+                end
+                if Multi then
+                    Selected = MultiCopy(Cfg.Default)
+                end
                 
                 local Drop = Create("TextButton", {
                     Parent = TargetParent,
@@ -3439,7 +3478,7 @@ function Elements:CreateDropdown(Cfg)
                     Size = UDim2.new(1, -40, 0, 34),
                     Position = UDim2.new(0, 12, 0, 0),
                     BackgroundTransparency = 1,
-                    Text = (Cfg.Name or "Dropdown") .. (Selected and " - " .. tostring(Selected) or ""),
+                    Text = Multi and (Cfg.Name or "Dropdown") or ((Cfg.Name or "Dropdown") .. (Selected and " - " .. tostring(Selected) or "")),
                     Font = Library.GlobalFont,
                     TextColor3 = SelectedTheme.Text,
                     TextSize = 14,
@@ -3482,7 +3521,31 @@ function Elements:CreateDropdown(Cfg)
                 
                 local ListLayout = Create("UIListLayout", { Parent = Container, Padding = UDim.new(0, 4) })
                 
+                local MultiButtons = {}
+                local function PaintMulti()
+                    for it, rec in pairs(MultiButtons) do
+                        if rec.Btn.Parent then
+                            local on = Selected[it] == true
+                            rec.Btn.BackgroundTransparency = on and 0.45 or 0.8
+                            local col = on and SelectedTheme.ElementAccent or SelectedTheme.TextDark
+                            rec.Btn.TextColor3 = col
+                            if rec.Label then rec.Label.TextColor3 = col end
+                        end
+                    end
+                end
+
                 local function Update(val) 
+                    if Multi then
+                        Selected = MultiCopy(val)
+                        Title.Text = MultiText()
+                        PaintMulti()
+                        local out = MultiCopy(Selected)
+                        Library.Flags[Flag] = out
+                        if Cfg.Callback then
+                            Cfg.Callback(MultiCopy(Selected))
+                        end
+                        return
+                    end
                     Selected = val 
                     Title.Text = (Cfg.Name or "Dropdown") .. " - " .. tostring(Selected) 
                     if Cfg.Callback then
@@ -3500,6 +3563,18 @@ function Elements:CreateDropdown(Cfg)
                     end
                     
                     local found = false
+                    local multiPruned = false
+                    if Multi then
+                        table.clear(MultiButtons)
+                        local valid = {}
+                        for _, v in pairs(Options) do valid[v] = true end
+                        for k in pairs(Selected) do
+                            if not valid[k] then
+                                Selected[k] = nil
+                                multiPruned = true
+                            end
+                        end
+                    end
                     for _, v in pairs(Options) do
                         if v == Selected then
                             found = true
@@ -3507,7 +3582,9 @@ function Elements:CreateDropdown(Cfg)
                         end
                     end
                     
-                    if found then
+                    if Multi then
+                        Title.Text = MultiText()
+                    elseif found then
                         Title.Text = (Cfg.Name or "Dropdown") .. " - " .. tostring(Selected)
                     else
                         Selected = nil
@@ -3583,6 +3660,9 @@ function Elements:CreateDropdown(Cfg)
                         end
 
                         local hoverTweenBtn, leaveTweenBtn
+                        if Multi then
+                            MultiButtons[item] = {Btn = Btn, Label = ItemLabel}
+                        end
                         Btn.MouseEnter:Connect(function()
                             if leaveTweenBtn then leaveTweenBtn:Cancel() end
                             hoverTweenBtn = TS:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.2, TextColor3 = SelectedTheme.Text})
@@ -3593,6 +3673,14 @@ function Elements:CreateDropdown(Cfg)
                         end)
                         Btn.MouseLeave:Connect(function()
                             if hoverTweenBtn then hoverTweenBtn:Cancel() end
+                            if Multi and Selected[item] then
+                                leaveTweenBtn = TS:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.45, TextColor3 = SelectedTheme.ElementAccent})
+                                leaveTweenBtn:Play()
+                                if ItemLabel then
+                                    ItemLabel.TextColor3 = SelectedTheme.ElementAccent
+                                end
+                                return
+                            end
                             leaveTweenBtn = TS:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.8, TextColor3 = SelectedTheme.TextDark})
                             leaveTweenBtn:Play()
                             if ItemLabel then
@@ -3600,6 +3688,14 @@ function Elements:CreateDropdown(Cfg)
                             end
                         end)
                         Btn.MouseButton1Click:Connect(function()
+                            if Multi then
+                                if hoverTweenBtn then hoverTweenBtn:Cancel() end
+                                if leaveTweenBtn then leaveTweenBtn:Cancel() end
+                                local nextSel = MultiCopy(Selected)
+                                if nextSel[item] then nextSel[item] = nil else nextSel[item] = true end
+                                Update(nextSel)
+                                return
+                            end
                             Update(item)
                             Expanded = false
                             TS:Create(Drop, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 34)}):Play()
@@ -3608,6 +3704,15 @@ function Elements:CreateDropdown(Cfg)
                     end
                     local stepH = PlayerIcons and 34 or 32
                     Container.CanvasSize = UDim2.new(0, 0, 0, #Options * stepH + 10)
+                    if Multi then
+                        PaintMulti()
+                        if multiPruned then
+                            Library.Flags[Flag] = MultiCopy(Selected)
+                            if Cfg.Callback then
+                                task.spawn(Cfg.Callback, MultiCopy(Selected))
+                            end
+                        end
+                    end
                 end
                 
                 RefreshList(Options)
@@ -3631,7 +3736,7 @@ function Elements:CreateDropdown(Cfg)
                 Library.Items[Flag] = {
                     Set = Update,
                     Refresh = function(self, list) RefreshList(list) end,
-                    Get = function() return Selected end
+                    Get = function() if Multi then return MultiCopy(Selected) end return Selected end
                 }
                 
                 return Library.Items[Flag]
