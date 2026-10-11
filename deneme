@@ -2038,10 +2038,81 @@ function Library:CreateWindow(Settings)
     local ActiveTab = nil
     local Funcs = {}
 
-    -- ===== SEARCH (aktif sekmedeki elementleri filtreler) =====
+    -- ===== SEARCH (TUM sekmelerde arar; hangi sekmede olursan ol) =====
     local SearchQuery = ""
-    local SearchSnapshot = nil
-    local SearchBlocks = nil
+    local AllTabs = {}
+    local BlockSeq = 0
+    local SearchState = nil
+
+    local SearchPage = Create("ScrollingFrame", {
+        Name = "SearchResults",
+        Parent = PageContainer,
+        Size = UDim2.new(1, 0, 1, 0),
+        BackgroundTransparency = 1,
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = SelectedTheme.TextDark,
+        BorderSizePixel = 0,
+        Visible = false,
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        ZIndex = 6
+    })
+    local SR_Holder = Create("Frame", {
+        Name = "SearchColumns",
+        Parent = SearchPage,
+        Size = UDim2.fromScale(1, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1
+    })
+    Create("UIListLayout", {
+        Parent = SR_Holder,
+        FillDirection = Enum.FillDirection.Horizontal,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 10)
+    })
+    Create("UIPadding", {
+        Parent = SR_Holder,
+        PaddingTop = UDim.new(0, 2),
+        PaddingLeft = UDim.new(0, 5),
+        PaddingRight = UDim.new(0, 10),
+        PaddingBottom = UDim.new(0, 15)
+    })
+    local SR_Left = Create("Frame", {
+        Parent = SR_Holder,
+        Size = UDim2.new(0.5, -5, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        LayoutOrder = 1
+    })
+    local SR_LeftLayout = Create("UIListLayout", {Parent = SR_Left, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 10)})
+    local SR_Right = Create("Frame", {
+        Parent = SR_Holder,
+        Size = UDim2.new(0.5, -5, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        LayoutOrder = 2
+    })
+    local SR_RightLayout = Create("UIListLayout", {Parent = SR_Right, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 10)})
+    local function SR_UpdateCanvas()
+        local maxH = math.max(SR_LeftLayout.AbsoluteContentSize.Y, SR_RightLayout.AbsoluteContentSize.Y)
+        SearchPage.CanvasSize = UDim2.new(0, 0, 0, maxH + 30)
+    end
+    SR_LeftLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(SR_UpdateCanvas)
+    SR_RightLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(SR_UpdateCanvas)
+
+    local SR_Empty = Create("TextLabel", {
+        Name = "NoResults",
+        Parent = SearchPage,
+        Size = UDim2.new(1, 0, 0, 40),
+        Position = UDim2.new(0, 0, 0, 10),
+        BackgroundTransparency = 1,
+        Text = "No results",
+        Font = Library.GlobalFont,
+        TextColor3 = SelectedTheme.TextDark,
+        TextSize = 14,
+        Visible = false,
+        ZIndex = 7,
+        ThemeTag = "TextDark"
+    })
 
     local function TextHit(t, q)
         return type(t) == "string" and t ~= "" and string.find(string.lower(t), q, 1, true) ~= nil
@@ -2068,38 +2139,110 @@ function Library:CreateWindow(Settings)
         if sep then sep.Visible = not collapsed end
     end
 
+    -- Sekme basligi tasiyan sonuc kutusu (tek sutunlu sekmelerdeki elementler icin)
+    local function MakeResultGroup(title)
+        local F = Create("Frame", {
+            Name = "SearchGroup",
+            Size = UDim2.new(1, 0, 0, 0),
+            AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundColor3 = Style.Panel,
+            BorderSizePixel = 0,
+            ZIndex = 5
+        })
+        AddCorner(F, 9)
+        Create("UIStroke", {Parent = F, Color = Style.Outline, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border})
+        Create("TextLabel", {
+            Name = "GroupTitle",
+            Parent = F,
+            Size = UDim2.new(1, -24, 0, 34),
+            Position = UDim2.new(0, 12, 0, 0),
+            BackgroundTransparency = 1,
+            Text = tostring(title),
+            Font = Library.GlobalFont,
+            TextColor3 = SelectedTheme.Text,
+            TextSize = 14,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            ZIndex = 7
+        })
+        Create("Frame", {
+            Parent = F,
+            Size = UDim2.new(1, 0, 0, 1),
+            Position = UDim2.new(0, 0, 0, 34),
+            BackgroundColor3 = Style.Outline,
+            BorderSizePixel = 0,
+            ZIndex = 6
+        })
+        local Content = Create("Frame", {
+            Name = "BlockContent",
+            Parent = F,
+            Size = UDim2.new(1, 0, 0, 0),
+            Position = UDim2.new(0, 0, 0, 35),
+            AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundTransparency = 1,
+            ZIndex = 5
+        })
+        Create("UIListLayout", {Parent = Content, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 6)})
+        Create("UIPadding", {Parent = Content, PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 10), PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8)})
+        return F, Content
+    end
+
+    -- Onceki aramayi tamamen geri al: her sey kendi sekmesine/yerine doner
+    local function RestoreSearch()
+        local st = SearchState
+        if not st then return end
+        SearchState = nil
+        for i = #st.Moved, 1, -1 do
+            local m = st.Moved[i]
+            if m.Obj and m.Obj.Parent then
+                m.Obj.Parent = m.Parent
+                m.Obj.LayoutOrder = m.Order
+            end
+        end
+        for obj, vis in pairs(st.Snapshot) do
+            if obj.Parent then obj.Visible = vis end
+        end
+        for lbl, txt in pairs(st.Titles) do
+            if lbl.Parent then lbl.Text = txt end
+        end
+        for blk in pairs(st.Blocks) do
+            RestoreBlock(blk)
+        end
+        for _, t in ipairs(st.Temp) do
+            pcall(function() t:Destroy() end)
+        end
+    end
+
     local function ApplySearch()
         local q = string.lower(SearchQuery or "")
         q = q:gsub("^%s+", ""):gsub("%s+$", "")
 
+        RestoreSearch()
+
         if q == "" then
-            if SearchSnapshot then
-                for obj, vis in pairs(SearchSnapshot) do
-                    if obj.Parent then obj.Visible = vis end
-                end
-                for blk in pairs(SearchBlocks) do
-                    RestoreBlock(blk)
-                end
+            SearchPage.Visible = false
+            SR_Empty.Visible = false
+            if ActiveTab and ActiveTab.Page then
+                ActiveTab.Page.Visible = true
+                ActiveTab.Page.Position = UDim2.new(0, 0, 0, 0)
             end
-            SearchSnapshot, SearchBlocks = nil, nil
             return
         end
 
-        if not ActiveTab then return end
-        SearchSnapshot = SearchSnapshot or {}
-        SearchBlocks = SearchBlocks or {}
+        local st = {Snapshot = {}, Moved = {}, Titles = {}, Blocks = {}, Temp = {}}
+        SearchState = st
 
         local function Snap(o)
-            if SearchSnapshot[o] == nil then
-                SearchSnapshot[o] = o.Visible
+            if st.Snapshot[o] == nil then
+                st.Snapshot[o] = o.Visible
             end
-            return SearchSnapshot[o]
+            return st.Snapshot[o]
         end
 
         local function FilterList(container, forceShow)
             local any = false
             for _, el in ipairs(container:GetChildren()) do
-                if el:IsA("GuiObject") and el.Name ~= "ColumnsHolder" then
+                if el:IsA("GuiObject") then
                     local was = Snap(el)
                     local hit = was and (forceShow or ElementHit(el, q))
                     el.Visible = hit and true or false
@@ -2109,38 +2252,121 @@ function Library:CreateWindow(Settings)
             return any
         end
 
-        local Page = ActiveTab.Page
-        FilterList(Page, false)
+        local function EstHeight(container)
+            local h = 50
+            for _, el in ipairs(container:GetChildren()) do
+                if el:IsA("GuiObject") and el.Visible then
+                    local y = el.Size.Y.Offset
+                    if not y or y <= 0 then y = el.AbsoluteSize.Y end
+                    h = h + (y or 30) + 6
+                end
+            end
+            return h
+        end
 
-        local Holder = Page:FindFirstChild("ColumnsHolder")
-        if Holder then
-            for _, col in ipairs(Holder:GetChildren()) do
-                if col:IsA("Frame") then
-                    for _, blk in ipairs(col:GetChildren()) do
-                        if blk:IsA("Frame") and blk.Name == "Block" then
-                            SearchBlocks[blk] = true
-                            local blockWas = Snap(blk)
-                            local titleLbl = blk:FindFirstChild("BlockHeader") and blk.BlockHeader:FindFirstChild("BlockTitle")
+        local seq, hL, hR, found = 0, 0, 0, 0
+        local function Place(obj, estH, record)
+            seq = seq + 1
+            local col
+            if hL <= hR then
+                col = SR_Left
+                hL = hL + estH
+            else
+                col = SR_Right
+                hR = hR + estH
+            end
+            if record then
+                table.insert(st.Moved, {Obj = obj, Parent = obj.Parent, Order = obj.LayoutOrder})
+            end
+            obj.LayoutOrder = seq
+            obj.Parent = col
+            found = found + 1
+        end
+
+        for _, T in ipairs(AllTabs) do
+            local Page = T.Page
+            if Page and Page.Parent then
+                local Holder = Page:FindFirstChild("ColumnsHolder")
+
+                -- 1) Sekmede dogrudan duran elementler (orn. Fight sekmesi)
+                local loose = {}
+                for _, el in ipairs(Page:GetChildren()) do
+                    if el:IsA("GuiObject") and el ~= Holder and Snap(el) and ElementHit(el, q) then
+                        table.insert(loose, el)
+                    end
+                end
+                if #loose > 0 then
+                    local grp, content = MakeResultGroup(T.Name)
+                    table.insert(st.Temp, grp)
+                    for _, el in ipairs(loose) do
+                        table.insert(st.Moved, {Obj = el, Parent = el.Parent, Order = el.LayoutOrder})
+                        el.Parent = content
+                    end
+                    Place(grp, EstHeight(content), false)
+                end
+
+                -- 2) Bloklar
+                if Holder then
+                    local blocks = {}
+                    for _, col in ipairs(Holder:GetChildren()) do
+                        if col:IsA("Frame") then
+                            for _, blk in ipairs(col:GetChildren()) do
+                                if blk:IsA("Frame") and blk.Name == "Block" then
+                                    table.insert(blocks, blk)
+                                end
+                            end
+                        end
+                    end
+                    table.sort(blocks, function(a, b) return (a.LayoutOrder or 0) < (b.LayoutOrder or 0) end)
+
+                    for _, blk in ipairs(blocks) do
+                        if Snap(blk) then
+                            local header = blk:FindFirstChild("BlockHeader")
+                            local titleLbl = header and header:FindFirstChild("BlockTitle")
                             local titleHit = titleLbl and TextHit(titleLbl.Text, q)
                             local content = blk:FindFirstChild("BlockContent")
                             local any = content and FilterList(content, titleHit) or false
-                            local show = blockWas and (titleHit or any) and true or false
-                            blk.Visible = show
-                            if show then
+                            if titleHit or any then
+                                st.Blocks[blk] = true
                                 if content then content.Visible = true end
                                 local sep = blk:FindFirstChild("BlockSep")
                                 if sep then sep.Visible = true end
+                                if titleLbl then
+                                    st.Titles[titleLbl] = titleLbl.Text
+                                    titleLbl.Text = tostring(T.Name) .. "  /  " .. titleLbl.Text
+                                end
+                                Place(blk, content and EstHeight(content) or 50, true)
                             end
                         end
                     end
                 end
             end
         end
+
+        for _, T in ipairs(AllTabs) do
+            if T.Page then T.Page.Visible = false end
+        end
+        SR_Empty.Visible = (found == 0)
+        SearchPage.CanvasPosition = Vector2.new(0, 0)
+        SearchPage.Visible = true
+        SR_UpdateCanvas()
     end
 
+    -- Yazarken her harfte degil, kisa bir bekleme sonrasi ara (kasma olmasin)
+    local SearchToken = 0
     SearchInput:GetPropertyChangedSignal("Text"):Connect(function()
         SearchQuery = SearchInput.Text
-        ApplySearch()
+        SearchToken = SearchToken + 1
+        local my = SearchToken
+        if SearchQuery:gsub("%s", "") == "" then
+            ApplySearch()
+            return
+        end
+        task.delay(0.12, function()
+            if my == SearchToken then
+                ApplySearch()
+            end
+        end)
     end)
 
     -- ===== OPEN / CLOSE =====
@@ -2371,6 +2597,7 @@ function Library:CreateWindow(Settings)
             ZIndex = 6
         })
         
+        table.insert(AllTabs, {Name = TabName, Page = Page})
         local LeftCol, RightCol
         if Two_Column then
             local ColumnsHolder = Create("Frame", {
@@ -2453,6 +2680,11 @@ function Library:CreateWindow(Settings)
 
         local function Activate()
             if ActiveTab and ActiveTab.Btn == TabBtn then
+                if SearchState then
+                    SearchInput.Text = ""
+                    SearchQuery = ""
+                    ApplySearch()
+                end
                 return
             end
 
@@ -2508,7 +2740,10 @@ function Library:CreateWindow(Settings)
                 TS:Create(Page, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}):Play()
             end
 
-            if SearchQuery ~= "" then
+            -- Arama acikken sekmeye tiklanirsa arama temizlenir ve o sekme acilir
+            if SearchQuery ~= "" or SearchState then
+                SearchInput.Text = ""
+                SearchQuery = ""
                 ApplySearch()
             end
         end
@@ -3799,9 +4034,11 @@ function Elements:CreateDropdown(Cfg)
                 local TargetColumn = (Side == "Right" and RightCol) or LeftCol
                 local HEADER_H = 34
 
+                BlockSeq = BlockSeq + 1
                 local BlockFrame = Create("Frame", {
                     Name = "Block",
                     Parent = TargetColumn,
+                    LayoutOrder = BlockSeq,
                     Size = UDim2.new(1, 0, 0, 0),
                     AutomaticSize = Enum.AutomaticSize.Y,
                     BackgroundColor3 = Style.Panel,
