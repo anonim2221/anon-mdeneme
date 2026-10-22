@@ -1261,7 +1261,8 @@ function Library:CreateWindow(Settings)
     end
 
     local CustomIconID = Config.CustomIcon
-    local CompactSidebar = Config.CompactSidebar == true
+    local sidebarViewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
+    local CompactSidebar = Config.CompactSidebar == true and UIS.TouchEnabled and (sidebarViewport.X < 850 or sidebarViewport.Y < 600)
     local SidebarWidth = CompactSidebar and 54 or 165
     local SidebarX = CompactSidebar and 8 or 15
     local ContentX = SidebarX + SidebarWidth + 15
@@ -4488,12 +4489,7 @@ function Elements:CreateDropdown(Cfg)
                     Icon = Color3.fromRGB(92, 65, 79)
                 },
                 Window = {
-                    BackgroundTransparency = 0,
-                    DesktopWidthScale = 0.78,
-                    DesktopHeightScale = 0.94,
-                    MaxWidth = 2240,
-                    MaxHeight = 1350,
-                    MobileMargin = 20
+                    BackgroundTransparency = 0
                 },
                 Characters = {
                     {
@@ -4891,18 +4887,8 @@ function Elements:CreateDropdown(Cfg)
                 if not windowSizeBeforeMenuStyle then
                     windowSizeBeforeMenuStyle = WindowContainer.Size
                 end
-                local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or VP
-                local mobile = UIS.TouchEnabled and (viewport.X < 850 or viewport.Y < 600)
-                local width, height
-                if mobile then
-                    local margin = preset.Window.MobileMargin or 20
-                    width = math.max(280, viewport.X - margin * 2)
-                    height = math.max(300, viewport.Y - margin * 2)
-                else
-                    width = math.min(preset.Window.MaxWidth or 2240, math.max(760, math.floor(viewport.X * (preset.Window.DesktopWidthScale or 0.78))))
-                    height = math.min(preset.Window.MaxHeight or 1350, math.max(620, math.floor(viewport.Y * (preset.Window.DesktopHeightScale or 0.94))))
-                end
-                WindowContainer.Size = UDim2.fromOffset(width, height)
+                -- Menu Style degisince pencere boyutunu buyutme; mevcut standart boyutu koru.
+                WindowContainer.Size = windowSizeBeforeMenuStyle
             elseif enabled and windowSizeBeforeMenuStyle then
                 WindowContainer.Size = windowSizeBeforeMenuStyle
             elseif not enabled and windowSizeBeforeMenuStyle then
