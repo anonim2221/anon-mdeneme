@@ -1697,6 +1697,7 @@ function Library:CreateWindow(Settings)
     local FOOTER_H = 22
     local TAB_H = 32
     SidebarWidth = CompactSidebar and 52 or 170
+    local BaseSidebarWidth = SidebarWidth
 
     local WindowContainer = Create("Frame", {
         Name = "WindowContainer",
@@ -1789,7 +1790,7 @@ function Library:CreateWindow(Settings)
 
     -- Ust cizgi / sidebar dikey cizgi / footer cizgisi
     Divider({Name = "TopDivider", Parent = Main, Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 0, TOPBAR_H)})
-    Divider({Name = "SideDivider", Parent = Main, Size = UDim2.new(0, 1, 1, -FOOTER_H), Position = UDim2.new(0, SidebarWidth, 0, 0)})
+    local SideDivider = Divider({Name = "SideDivider", Parent = Main, Size = UDim2.new(0, 1, 1, -FOOTER_H), Position = UDim2.new(0, SidebarWidth, 0, 0)})
     Divider({Name = "FooterDivider", Parent = Main, Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -FOOTER_H)})
 
     -- ===== TOP BAR =====
@@ -1813,22 +1814,22 @@ function Library:CreateWindow(Settings)
     })
     SetImageAsync(LogoIcon, "Image", (CustomIconID and CustomIconID ~= "") and CustomIconID or "rbxassetid://10884488899")
 
-    if not CompactSidebar then
-        Create("TextLabel", {
-            Parent = TopBar,
-            Size = UDim2.new(0, SidebarWidth - 54, 1, 0),
-            Position = UDim2.new(0, 48, 0, 0),
-            BackgroundTransparency = 1,
-            Text = Title,
-            Font = Library.GlobalFontBold,
-            TextColor3 = SelectedTheme.Text,
-            TextSize = 14,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextTruncate = Enum.TextTruncate.AtEnd,
-            ZIndex = 7,
-            ThemeTag = "Text"
-        })
-    end
+    local WindowTitle = Create("TextLabel", {
+        Name = "WindowTitle",
+        Parent = TopBar,
+        Visible = not CompactSidebar,
+        Size = UDim2.new(0, SidebarWidth - 54, 1, 0),
+        Position = UDim2.new(0, 48, 0, 0),
+        BackgroundTransparency = 1,
+        Text = Title,
+        Font = Library.GlobalFontBold,
+        TextColor3 = SelectedTheme.Text,
+        TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        ZIndex = 7,
+        ThemeTag = "Text"
+    })
 
     -- Search bar (turkuaz)
     local SearchFrame = Create("Frame", {
@@ -2007,6 +2008,10 @@ function Library:CreateWindow(Settings)
 
     local function AttachTooltip(obj, text)
         obj.MouseEnter:Connect(function()
+            if Library.MenuStyleShellActive and not IsMobile then
+                Tooltip.Visible = false
+                return
+            end
             Tooltip.Text = text
             Tooltip.Position = UDim2.fromOffset(Mouse.X + 16, Mouse.Y - 11)
             Tooltip.Visible = true
@@ -2078,21 +2083,23 @@ function Library:CreateWindow(Settings)
     })
     ApplyIcon(SettingsGear, "settings")
 
-    if not CompactSidebar then
-        Create("TextLabel", {
-            Name = "TabLabel",
-            Parent = OpenSettingsBtn,
-            Size = UDim2.new(1, -40, 1, 0),
-            Position = UDim2.new(0, 36, 0, 0),
-            BackgroundTransparency = 1,
-            Text = "UI Settings",
-            Font = Library.GlobalFont,
-            TextColor3 = SelectedTheme.TextDark,
-            TextSize = 13,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            ZIndex = 7
-        })
-    else
+    local SettingsLabel = Create("TextLabel", {
+        Name = "TabLabel",
+        Parent = OpenSettingsBtn,
+        Visible = not CompactSidebar,
+        Size = UDim2.new(1, -40, 1, 0),
+        Position = UDim2.new(0, 36, 0, 0),
+        BackgroundTransparency = 1,
+        Text = "UI Settings",
+        Font = Library.GlobalFont,
+        TextColor3 = SelectedTheme.TextDark,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 7,
+        ThemeTag = "TextDark"
+    })
+    table.insert(Library.ThemeObjects.TabLabels, {Label = SettingsLabel, Btn = OpenSettingsBtn, Icon = SettingsGear})
+    if CompactSidebar then
         AttachTooltip(OpenSettingsBtn, "UI Settings")
     end
 
@@ -4465,9 +4472,9 @@ function Elements:CreateDropdown(Cfg)
                     Main = Color3.fromRGB(254, 183, 213),
                     Second = Color3.fromRGB(214, 241, 254),
                     Accent = Color3.fromRGB(253, 164, 196),
-                    ElementAccent = Color3.fromRGB(230, 168, 246),
-                    Text = Color3.fromRGB(67, 45, 57),
-                    TextDark = Color3.fromRGB(119, 88, 105),
+                    ElementAccent = Color3.fromRGB(154, 90, 131),
+                    Text = Color3.fromRGB(52, 34, 45),
+                    TextDark = Color3.fromRGB(92, 65, 79),
                     Error = Color3.fromRGB(193, 76, 113),
                     GradientStart = Color3.fromRGB(253, 164, 196),
                     GradientEnd = Color3.fromRGB(230, 168, 246),
@@ -4478,7 +4485,7 @@ function Elements:CreateDropdown(Cfg)
                     Panel = Color3.fromRGB(251, 216, 235),
                     Element = Color3.fromRGB(199, 182, 219),
                     Outline = Color3.fromRGB(152, 121, 135),
-                    Icon = Color3.fromRGB(116, 83, 101)
+                    Icon = Color3.fromRGB(92, 65, 79)
                 },
                 Window = {
                     BackgroundTransparency = 0,
@@ -4556,13 +4563,6 @@ function Elements:CreateDropdown(Cfg)
                     }
                 },
                 Decorations = {
-                    {Kind = "Symbol", Name = "CloudLeft", Text = "☁", XScale = 0.015, YOffset = 62, Size = 42, MobileSize = 28, Color = Color3.fromRGB(255, 250, 255)},
-                    {Kind = "Symbol", Name = "CloudRight", Text = "☁", XScale = 0.985, YOffset = 76, Size = 38, MobileSize = 26, Color = Color3.fromRGB(255, 250, 255)},
-                    {Kind = "Symbol", Name = "StarLeft", Text = "✦", XScale = 0.055, YOffset = 142, Size = 25, MobileSize = 17, Color = Color3.fromRGB(255, 238, 187)},
-                    {Kind = "Symbol", Name = "StarCenter", Text = "★", XScale = 0.455, YOffset = 126, Size = 20, MobileSize = 15, Color = Color3.fromRGB(230, 168, 246)},
-                    {Kind = "Symbol", Name = "StarRight", Text = "✦", XScale = 0.955, YOffset = 150, Size = 26, MobileSize = 17, Color = Color3.fromRGB(255, 238, 187)},
-                    {Kind = "Symbol", Name = "HeartLeft", Text = "♡", XScale = 0.235, YOffset = 156, Size = 24, MobileSize = 16, Color = Color3.fromRGB(253, 164, 196)},
-                    {Kind = "Symbol", Name = "HeartRight", Text = "♡", XScale = 0.785, YOffset = 146, Size = 24, MobileSize = 16, Color = Color3.fromRGB(230, 168, 246)},
                     {Kind = "Parachute", Name = "PastelParachuteLeft", XScale = 0.185, YOffset = -28, Width = 54, Height = 72, MobileWidth = 38, MobileHeight = 52, Image = "rbxthumb://type=Asset&id=17104568520&w=420&h=420", CanopyColor = Color3.fromRGB(255, 238, 187)},
                     {Kind = "Parachute", Name = "PastelParachuteRight", XScale = 0.825, YOffset = -24, Width = 50, Height = 68, MobileWidth = 36, MobileHeight = 50, Image = "rbxthumb://type=Asset&id=10541361366&w=420&h=420", CanopyColor = Color3.fromRGB(230, 168, 246)}
                 }
@@ -4798,6 +4798,74 @@ function Elements:CreateDropdown(Cfg)
             if Tooltip then Tooltip.BackgroundColor3 = Style.Element end
             if TooltipStroke then TooltipStroke.Color = Style.Outline end
             if OpenSettingsBtn then OpenSettingsBtn.BackgroundColor3 = Style.Element end
+
+            local expandedSidebar = (not CompactSidebar) or (pastelShellActive and not IsMobile)
+            if Tooltip and expandedSidebar then Tooltip.Visible = false end
+            SidebarWidth = expandedSidebar and 170 or BaseSidebarWidth
+            if TabContainer then
+                TabContainer.Size = UDim2.new(0, SidebarWidth, 1, -(TOPBAR_H + FOOTER_H + 1))
+                TabContainer.BackgroundColor3 = Style.Panel
+                TabContainer.BackgroundTransparency = pastelShellActive and 0.12 or 1
+            end
+            if SideDivider then
+                SideDivider.Position = UDim2.new(0, SidebarWidth, 0, 0)
+            end
+            if PageContainer then
+                PageContainer.Size = UDim2.new(1, -(SidebarWidth + 8 + 6), 1, -(TOPBAR_H + FOOTER_H + 14))
+                PageContainer.Position = UDim2.new(0, SidebarWidth + 8, 0, TOPBAR_H + 8)
+            end
+            if SearchFrame then
+                SearchFrame.Position = UDim2.new(0, SidebarWidth + 8, 0.5, 0)
+                SearchFrame.Size = UDim2.new(1, -(SidebarWidth + 8 + 44), 0, 30)
+            end
+            if LogoIcon then
+                LogoIcon.AnchorPoint = expandedSidebar and Vector2.new(0, 0.5) or Vector2.new(0.5, 0.5)
+                LogoIcon.Position = expandedSidebar and UDim2.new(0, 14, 0.5, 0) or UDim2.new(0, SidebarWidth / 2, 0.5, 0)
+            end
+            if WindowTitle then
+                WindowTitle.Visible = expandedSidebar
+                WindowTitle.Size = UDim2.new(0, SidebarWidth - 54, 1, 0)
+                WindowTitle.Position = UDim2.new(0, 48, 0, 0)
+                WindowTitle.TextSize = pastelShellActive and 15 or 14
+            end
+            if SettingsGear then
+                SettingsGear.AnchorPoint = expandedSidebar and Vector2.new(0, 0.5) or Vector2.new(0.5, 0.5)
+                SettingsGear.Position = expandedSidebar and UDim2.new(0, 10, 0.5, 0) or UDim2.new(0.5, 0, 0.5, 0)
+            end
+            if SettingsLabel then
+                SettingsLabel.Visible = expandedSidebar
+                SettingsLabel.Size = UDim2.new(1, -40, 1, 0)
+                SettingsLabel.Position = UDim2.new(0, 36, 0, 0)
+                SettingsLabel.TextSize = pastelShellActive and 14 or 13
+            end
+            if TabContainer then
+                for _, tabButton in ipairs(TabContainer:GetChildren()) do
+                    if tabButton:IsA("TextButton") then
+                        local label = tabButton:FindFirstChild("TabLabel")
+                        local icon = tabButton:FindFirstChild("TabIcon")
+                        local hasIcon = icon ~= nil
+                        if label then
+                            label.Visible = expandedSidebar or not (CompactSidebar and hasIcon)
+                            if expandedSidebar then
+                                label.Size = UDim2.new(1, -42, 1, 0)
+                                label.Position = UDim2.new(0, 36, 0, 0)
+                                label.TextSize = pastelShellActive and 14 or 13
+                            else
+                                label.Size = UDim2.new(1, hasIcon and -42 or -20, 1, 0)
+                                label.Position = UDim2.new(0, hasIcon and 36 or 12, 0, 0)
+                                label.TextSize = 13
+                            end
+                        end
+                        if icon then
+                            icon.AnchorPoint = expandedSidebar and Vector2.new(0, 0.5) or Vector2.new(0.5, 0.5)
+                            icon.Position = expandedSidebar and UDim2.new(0, 10, 0.5, 0) or UDim2.new(0.5, 0, 0.5, 0)
+                        end
+                        local selected = (ActiveTab and ActiveTab.Btn == tabButton) or (SettingsIsActive and tabButton == OpenSettingsBtn)
+                        tabButton.BackgroundColor3 = Style.Element
+                        tabButton.BackgroundTransparency = selected and 0 or 1
+                    end
+                end
+            end
 
             for _, obj in ipairs(Main:GetDescendants()) do
                 if obj:IsA("Frame") or obj:IsA("TextButton") then
