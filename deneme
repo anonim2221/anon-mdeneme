@@ -770,14 +770,13 @@ local function MakeDraggable(topbar, frame)
 end
 
 local function MakeResizable(handle, frame, onResize)
-    local dragging, dragStart, startSize, startPosition
+    local dragging, dragStart, startSize
 
     handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
             startSize = frame.AbsoluteSize
-            startPosition = frame.Position
         end
     end)
 
@@ -789,20 +788,15 @@ local function MakeResizable(handle, frame, onResize)
         local camera = workspace.CurrentCamera
         local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
         local isMobile = UIS.TouchEnabled and (viewport.X < 850 or viewport.Y < 600)
-        local minX = math.min(isMobile and 280 or 500, math.max(200, viewport.X - 24))
-        local minY = math.min(isMobile and 300 or 350, math.max(200, viewport.Y - 24))
-        local maxX = math.max(minX, math.min(1000, viewport.X - 24))
-        local maxY = math.max(minY, math.min(800, viewport.Y - 24))
+        local minX = isMobile and 280 or 500
+        local minY = isMobile and 300 or 350
         local delta = input.Position - dragStart
-        local newX = math.clamp(startSize.X + delta.X, minX, maxX)
-        local newY = math.clamp(startSize.Y + delta.Y, minY, maxY)
+        -- Like RESO, there is no maximum size; only a minimum is enforced.
+        local newX = math.max(minX, startSize.X + delta.X)
+        local newY = math.max(minY, startSize.Y + delta.Y)
 
-        -- Keep the top-left corner fixed while dragging the bottom-right resize grip.
+        -- WindowContainer is top-left anchored, so changing Size leaves that corner fixed.
         frame.Size = UDim2.fromOffset(newX, newY)
-        frame.Position = UDim2.new(
-            startPosition.X.Scale, startPosition.X.Offset + (newX - startSize.X) / 2,
-            startPosition.Y.Scale, startPosition.Y.Offset + (newY - startSize.Y) / 2
-        )
         if onResize then
             pcall(onResize, newX, newY)
         end
@@ -1281,7 +1275,8 @@ function Library:CreateWindow(Settings)
 
     local CustomIconID = Config.CustomIcon
     local sidebarViewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
-    local CompactSidebar = Config.CompactSidebar == true and UIS.TouchEnabled and (sidebarViewport.X < 850 or sidebarViewport.Y < 600)
+    -- Config.CompactSidebar now controls the initial state on every device.
+    local CompactSidebar = Config.CompactSidebar == true
     local CompactSidebarWidth = 52
     local ExpandedSidebarWidth = 170
     local SidebarExpanded = not CompactSidebar
@@ -1726,8 +1721,8 @@ function Library:CreateWindow(Settings)
         Name = "WindowContainer",
         Parent = ScreenGui,
         Size = WindowSize,
-        Position = UDim2.fromScale(0.5, 0.5),
-        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromOffset(math.max(0, (VP.X - WindowSizeX) / 2), math.max(0, (VP.Y - WindowSizeY) / 2)),
+        AnchorPoint = Vector2.zero,
         BackgroundTransparency = 1,
         ZIndex = 1
     })
