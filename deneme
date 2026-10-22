@@ -51,7 +51,8 @@ Library.ThemeObjects = {
     TextDark = {},
     Toggles = {},
     TabLabels = {},
-    Keybinds = {}
+    Keybinds = {},
+    ShellOutline = {}
 }
 
 Library.ThemeFolder = "SolarisUI-Themes"
@@ -542,6 +543,18 @@ local function UpdateThemeObjects()
             table.remove(Library.ThemeObjects.TextDark, i)
         end
     end
+    for i = #Library.ThemeObjects.ShellOutline, 1, -1 do
+        local stroke = Library.ThemeObjects.ShellOutline[i]
+        if stroke and stroke.Parent then
+            if Library.MenuStyleShellActive and Library.Style then
+                stroke.Color = Library.Style.Outline
+            else
+                stroke.Color = Color3.fromRGB(110, 110, 110)
+            end
+        else
+            table.remove(Library.ThemeObjects.ShellOutline, i)
+        end
+    end
     for i = #Library.ThemeObjects.Toggles, 1, -1 do
         local t = Library.ThemeObjects.Toggles[i]
         if t.Box and t.Box.Parent and t.Stroke and t.Stroke.Parent and t.Square and t.Square.Parent then
@@ -636,14 +649,15 @@ local function CreateDropShadow(parent, blurRadius, opacity)
 end
 
 local function AddStroke(instance, theme)
-    -- Astra tarzi: duz gri cizgi (gradient yok)
+    -- Astra tarzi: duz gri cizgi; Menu Style aktifken pastel mauve outline kullanir.
     local stroke = Create("UIStroke", {
-        Color = Color3.fromRGB(110, 110, 110),
+        Color = (Library.MenuStyleShellActive and Library.Style and Library.Style.Outline) or Color3.fromRGB(110, 110, 110),
         Thickness = 1,
         Transparency = 0.5,
         ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
         Parent = instance
     })
+    table.insert(Library.ThemeObjects.ShellOutline, stroke)
     return stroke
 end
 
@@ -709,7 +723,7 @@ local function CreateRipple(btn, color)
             Name = "Ripple",
             Parent = btn,
             Image = "rbxassetid://4743389506",
-            ImageColor3 = color,
+            ImageColor3 = (Library.ActiveTheme and Library.ActiveTheme.ElementAccent) or color,
             BackgroundTransparency = 1,
             ImageTransparency = 0.5,
             Position = UDim2.new(0, Mouse.X - btn.AbsolutePosition.X, 0, Mouse.Y - btn.AbsolutePosition.Y),
@@ -744,12 +758,15 @@ local function MakeDraggable(topbar, frame)
             dragInput = input
         end 
     end)
-    UIS.InputChanged:Connect(function(input)
+    local inputChangedConnection = UIS.InputChanged:Connect(function(input)
         if input == dragInput and dragging then
             local delta = input.Position - dragStart
             TS:Create(frame, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)}):Play()
         end
     end)
+    if Library.WindowConnections then
+        table.insert(Library.WindowConnections, inputChangedConnection)
+    end
 end
 
 local function MakeResizable(handle, frame)
@@ -770,7 +787,7 @@ local function MakeResizable(handle, frame)
         end
     end)
     
-    UIS.InputChanged:Connect(function(input)
+    local inputChangedConnection = UIS.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
             local newX = math.clamp(startSize.X + delta.X, MinSize.X, MaxSize.X)
@@ -778,6 +795,9 @@ local function MakeResizable(handle, frame)
             TS:Create(frame, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Size = UDim2.fromOffset(newX, newY)}):Play()
         end
     end)
+    if Library.WindowConnections then
+        table.insert(Library.WindowConnections, inputChangedConnection)
+    end
 end
 
 local function AttachHorizontalScroll(box, scrollingFrame, defaultAlignment)
@@ -1158,6 +1178,37 @@ function Library:CreateWindow(Settings)
     local Title = Config.Title or "UI"
     local SelectedTheme = GetTheme(Config.Theme)
 
+    Library.ThemeListeners = {}
+    Library.WindowConnections = {}
+    Library.WindowClosing = false
+    Library.WindowDestroyed = false
+    Library.CloseHandler = nil
+    Library.MenuStyleShellActive = false
+    function Library:OnThemeChanged(callback)
+        if type(callback) ~= "function" then
+            return function() end
+        end
+        table.insert(self.ThemeListeners, callback)
+        if self.ActiveTheme then
+            pcall(callback, self.ActiveTheme, self.MenuStyleActive == true)
+        end
+        return function()
+            for i = #self.ThemeListeners, 1, -1 do
+                if self.ThemeListeners[i] == callback then
+                    table.remove(self.ThemeListeners, i)
+                end
+            end
+        end
+    end
+
+    function Library:EmitThemeChanged(theme, menuStyleActive)
+        self.ActiveTheme = theme
+        self.MenuStyleActive = menuStyleActive == true
+        for _, callback in ipairs(self.ThemeListeners) do
+            pcall(callback, theme, self.MenuStyleActive)
+        end
+    end
+
     -- ===== ASTRA PALETI: notr siyah zemin + gri cizgiler, accent (turkuaz) korunur =====
     Library.Style = {
         Background = Color3.fromRGB(12, 12, 12),
@@ -1188,6 +1239,8 @@ function Library:CreateWindow(Settings)
     Themes.Default.GradientStart = SelectedTheme.GradientStart
     Themes.Default.GradientEnd = SelectedTheme.GradientEnd
     Themes.Default.Gradient = SelectedTheme.Gradient
+    Library.ActiveTheme = SelectedTheme
+    Library.MenuStyleActive = false
 
     if SelectedTheme.Font then
         UpdateFonts(SelectedTheme.Font)
@@ -1655,6 +1708,18 @@ function Library:CreateWindow(Settings)
         ZIndex = 1
     })
 
+    do
+        local ArtRoot = Create("Frame", {
+            Name = "MenuStyleArt",
+            Parent = WindowContainer,
+            Size = UDim2.fromScale(1, 1),
+            BackgroundTransparency = 1,
+            Visible = false,
+            ClipsDescendants = false,
+            ZIndex = 20
+        })
+    end
+
     -- Acilis/kapanis fade animasyonu icin CanvasGroup (sadece animasyon sirasinda kullanilir)
     local FadeGroup
     pcall(function()
@@ -1708,7 +1773,7 @@ function Library:CreateWindow(Settings)
     local OrbContainer = AddSoftOrbs(Main, SelectedTheme)
 
     AddCorner(Main, 10)
-    Create("UIStroke", {
+    local MainOutline = Create("UIStroke", {
         Parent = Main,
         Color = Style.Outline,
         Thickness = 1,
@@ -1861,10 +1926,30 @@ function Library:CreateWindow(Settings)
         TS:Create(CloseX, TweenInfo.new(0.2), {TextColor3 = SelectedTheme.Error}):Play()
     end)
     CloseX.MouseLeave:Connect(function()
-        TS:Create(CloseX, TweenInfo.new(0.2), {TextColor3 = Color3.new(1, 1, 1)}):Play()
+        local idleColor = Library.MenuStyleActive and Style.Icon or Color3.new(1, 1, 1)
+        TS:Create(CloseX, TweenInfo.new(0.2), {TextColor3 = idleColor}):Play()
     end)
     CloseX.MouseButton1Click:Connect(function()
-        ScreenGui:Destroy()
+        if Library.CloseWindow then
+            pcall(function() Library:CloseWindow() end)
+        end
+        local handler = Library.CloseHandler
+        if type(handler) == "function" then
+            task.spawn(function()
+                local ok = pcall(handler)
+                if not ok or not Library.WindowDestroyed then
+                    if Library.DestroyWindow then
+                        Library:DestroyWindow()
+                    else
+                        ScreenGui:Destroy()
+                    end
+                end
+            end)
+        elseif Library.DestroyWindow then
+            Library:DestroyWindow()
+        else
+            ScreenGui:Destroy()
+        end
     end)
 
     -- ===== FOOTER =====
@@ -1918,7 +2003,7 @@ function Library:CreateWindow(Settings)
     local TooltipCorner = Instance.new("UICorner")
     TooltipCorner.CornerRadius = UDim.new(0, 4)
     TooltipCorner.Parent = Tooltip
-    Create("UIStroke", {Parent = Tooltip, Color = Style.Outline, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border})
+    local TooltipStroke = Create("UIStroke", {Parent = Tooltip, Color = Style.Outline, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border})
 
     local function AttachTooltip(obj, text)
         obj.MouseEnter:Connect(function()
@@ -2386,6 +2471,7 @@ function Library:CreateWindow(Settings)
     end
 
     local function SetWindowOpen(show)
+        if show and (Library.WindowClosing or Library.WindowDestroyed) then return end
         IsOpen = show
 
         if not show then
@@ -2441,6 +2527,7 @@ function Library:CreateWindow(Settings)
     end
 
     local function ToggleUI()
+        if Library.WindowClosing or Library.WindowDestroyed then return end
         SetWindowOpen(not IsOpen)
     end
 
@@ -2457,6 +2544,32 @@ function Library:CreateWindow(Settings)
 
     function Library:SetWindowOpen(show)
         SetWindowOpen(show and true or false)
+    end
+
+    function Library:CloseWindow()
+        if self.WindowDestroyed then return end
+        self.WindowClosing = true
+        if IsOpen then SetWindowOpen(false) end
+    end
+
+    function Library:SetCloseHandler(callback)
+        self.CloseHandler = type(callback) == "function" and callback or nil
+    end
+
+    function Library:DestroyWindow()
+        if self.WindowDestroyed then return end
+        self:CloseWindow()
+        self.WindowDestroyed = true
+        self.CloseHandler = nil
+        for _, connection in ipairs(self.WindowConnections or {}) do
+            pcall(function() connection:Disconnect() end)
+        end
+        self.WindowConnections = {}
+        if self.ThemeListeners then table.clear(self.ThemeListeners) end
+        table.clear(ToggleCallbacks)
+        self.ActiveTheme = nil
+        self.MenuStyleActive = false
+        pcall(function() ScreenGui:Destroy() end)
     end
 
     SetWindowOpen(true)
@@ -2483,7 +2596,7 @@ function Library:CreateWindow(Settings)
         MobileBtn.MouseButton1Click:Connect(ToggleUI)
     end
 
-    UIS.InputBegan:Connect(function(input, gpe)
+    table.insert(Library.WindowConnections, UIS.InputBegan:Connect(function(input, gpe)
         if gpe or UIS:GetFocusedTextBox() then
             return
         end
@@ -2499,7 +2612,7 @@ function Library:CreateWindow(Settings)
         if input.KeyCode == currentToggle then
             ToggleUI()
         end
-    end)
+    end))
 
     function Funcs:CreateTab(TabName, Two_Column, ImageID)
         TabCount = TabCount + 1
@@ -2805,11 +2918,12 @@ function Library:CreateWindow(Settings)
                 })
                 local LineColor = Library.Style and Library.Style.Outline or Color3.fromRGB(40, 40, 40)
                 local LineL = Create("Frame", {
+                    Name = "DividerLine",
                     Parent = Holder,
                     AnchorPoint = Vector2.new(0, 0.5),
                     Position = UDim2.new(0, 2, 0.5, 0),
                     Size = UDim2.new(1, -4, 0, 1),
-                    BackgroundColor3 = Color3.fromRGB(70, 70, 70),
+                    BackgroundColor3 = LineColor,
                     BackgroundTransparency = 0.3,
                     BorderSizePixel = 0,
                     ZIndex = 8
@@ -2818,11 +2932,12 @@ function Library:CreateWindow(Settings)
                     return Holder
                 end
                 local LineR = Create("Frame", {
+                    Name = "DividerLine",
                     Parent = Holder,
                     AnchorPoint = Vector2.new(1, 0.5),
                     Position = UDim2.new(1, -2, 0.5, 0),
                     Size = UDim2.new(0.5, -40, 0, 1),
-                    BackgroundColor3 = Color3.fromRGB(70, 70, 70),
+                    BackgroundColor3 = LineColor,
                     BackgroundTransparency = 0.3,
                     BorderSizePixel = 0,
                     ZIndex = 8
@@ -4343,6 +4458,473 @@ function Elements:CreateDropdown(Cfg)
         end
     })
 
+    do
+        local MENU_STYLE_PRESETS = {
+            ["Pastel Sanrio"] = {
+                Palette = {
+                    Main = Color3.fromRGB(254, 183, 213),
+                    Second = Color3.fromRGB(214, 241, 254),
+                    Accent = Color3.fromRGB(253, 164, 196),
+                    ElementAccent = Color3.fromRGB(230, 168, 246),
+                    Text = Color3.fromRGB(67, 45, 57),
+                    TextDark = Color3.fromRGB(119, 88, 105),
+                    Error = Color3.fromRGB(193, 76, 113),
+                    GradientStart = Color3.fromRGB(253, 164, 196),
+                    GradientEnd = Color3.fromRGB(230, 168, 246),
+                    Background = ""
+                },
+                Shell = {
+                    Background = Color3.fromRGB(254, 183, 213),
+                    Panel = Color3.fromRGB(251, 216, 235),
+                    Element = Color3.fromRGB(199, 182, 219),
+                    Outline = Color3.fromRGB(152, 121, 135),
+                    Icon = Color3.fromRGB(116, 83, 101)
+                },
+                Window = {
+                    BackgroundTransparency = 0,
+                    DesktopWidthScale = 0.78,
+                    DesktopHeightScale = 0.94,
+                    MaxWidth = 2240,
+                    MaxHeight = 1350,
+                    MobileMargin = 20
+                },
+                Characters = {
+                    {
+                        Name = "Cinnamoroll",
+                        Image = "rbxthumb://type=Asset&id=118011660358950&w=420&h=420",
+                        Placement = "TopHang",
+                        Width = 128,
+                        Height = 118,
+                        MobileWidth = 68,
+                        MobileHeight = 64,
+                        XScale = 0.08,
+                        MobileXScale = 0.08,
+                        TopOffset = -86,
+                        MobileTopOffset = -49
+                    },
+                    {
+                        Name = "Pochacco",
+                        Image = "rbxthumb://type=Asset&id=13187317029&w=420&h=420",
+                        Placement = "TopHang",
+                        Width = 108,
+                        Height = 104,
+                        MobileWidth = 58,
+                        MobileHeight = 56,
+                        XScale = 0.29,
+                        MobileXScale = 0.28,
+                        TopOffset = -88,
+                        MobileTopOffset = -48
+                    },
+                    {
+                        Name = "Pompompurin",
+                        Image = "rbxthumb://type=Asset&id=17104568520&w=420&h=420",
+                        Placement = "TopHang",
+                        Width = 108,
+                        Height = 104,
+                        MobileWidth = 58,
+                        MobileHeight = 56,
+                        XScale = 0.50,
+                        MobileXScale = 0.49,
+                        TopOffset = -88,
+                        MobileTopOffset = -48
+                    },
+                    {
+                        Name = "My Melody",
+                        Image = "rbxthumb://type=Asset&id=10541361366&w=420&h=420",
+                        Placement = "TopHang",
+                        Width = 116,
+                        Height = 108,
+                        MobileWidth = 60,
+                        MobileHeight = 56,
+                        XScale = 0.72,
+                        MobileXScale = 0.71,
+                        TopOffset = -88,
+                        MobileTopOffset = -48
+                    },
+                    {
+                        Name = "Kuromi",
+                        Image = "rbxthumb://type=Asset&id=17861427309&w=420&h=420",
+                        Placement = "TopHang",
+                        Width = 112,
+                        Height = 108,
+                        MobileWidth = 60,
+                        MobileHeight = 58,
+                        XScale = 0.94,
+                        MobileXScale = 0.93,
+                        TopOffset = -82,
+                        MobileTopOffset = -44
+                    }
+                },
+                Decorations = {
+                    {Kind = "Symbol", Name = "CloudLeft", Text = "☁", XScale = 0.015, YOffset = 62, Size = 42, MobileSize = 28, Color = Color3.fromRGB(255, 250, 255)},
+                    {Kind = "Symbol", Name = "CloudRight", Text = "☁", XScale = 0.985, YOffset = 76, Size = 38, MobileSize = 26, Color = Color3.fromRGB(255, 250, 255)},
+                    {Kind = "Symbol", Name = "StarLeft", Text = "✦", XScale = 0.055, YOffset = 142, Size = 25, MobileSize = 17, Color = Color3.fromRGB(255, 238, 187)},
+                    {Kind = "Symbol", Name = "StarCenter", Text = "★", XScale = 0.455, YOffset = 126, Size = 20, MobileSize = 15, Color = Color3.fromRGB(230, 168, 246)},
+                    {Kind = "Symbol", Name = "StarRight", Text = "✦", XScale = 0.955, YOffset = 150, Size = 26, MobileSize = 17, Color = Color3.fromRGB(255, 238, 187)},
+                    {Kind = "Symbol", Name = "HeartLeft", Text = "♡", XScale = 0.235, YOffset = 156, Size = 24, MobileSize = 16, Color = Color3.fromRGB(253, 164, 196)},
+                    {Kind = "Symbol", Name = "HeartRight", Text = "♡", XScale = 0.785, YOffset = 146, Size = 24, MobileSize = 16, Color = Color3.fromRGB(230, 168, 246)},
+                    {Kind = "Parachute", Name = "PastelParachuteLeft", XScale = 0.185, YOffset = -28, Width = 54, Height = 72, MobileWidth = 38, MobileHeight = 52, Image = "rbxthumb://type=Asset&id=17104568520&w=420&h=420", CanopyColor = Color3.fromRGB(255, 238, 187)},
+                    {Kind = "Parachute", Name = "PastelParachuteRight", XScale = 0.825, YOffset = -24, Width = 50, Height = 68, MobileWidth = 36, MobileHeight = 50, Image = "rbxthumb://type=Asset&id=10541361366&w=420&h=420", CanopyColor = Color3.fromRGB(230, 168, 246)}
+                }
+            },
+            ["Spider-Man"] = {
+                Palette = {
+                    Main = Color3.fromRGB(8, 11, 18),
+                    Second = Color3.fromRGB(22, 31, 47),
+                    Accent = Color3.fromRGB(241, 45, 57),
+                    ElementAccent = Color3.fromRGB(54, 136, 244),
+                    Text = Color3.fromRGB(248, 251, 255),
+                    TextDark = Color3.fromRGB(173, 187, 205),
+                    Error = Color3.fromRGB(255, 90, 100),
+                    GradientStart = Color3.fromRGB(229, 38, 56),
+                    GradientEnd = Color3.fromRGB(44, 120, 232)
+                },
+                Characters = {
+                    {
+                        Name = "Spider-Man",
+                        Image = "rbxthumb://type=Asset&id=114254728091304&w=420&h=420",
+                        Placement = "TopHang",
+                        Width = 64,
+                        Height = 64,
+                        MobileWidth = 48,
+                        MobileHeight = 48,
+                        XScale = 0.90,
+                        MobileXScale = 0.80,
+                        TopOffset = -12,
+                        MobileTopOffset = -10
+                    }
+                }
+            },
+        }
+        local MENU_STYLE_NAMES = {}
+        for name in pairs(MENU_STYLE_PRESETS) do
+            table.insert(MENU_STYLE_NAMES, name)
+        end
+        table.sort(MENU_STYLE_NAMES)
+
+        local selectedMenuStyle = MENU_STYLE_NAMES[1]
+        local menuStyleEnabled = false
+        local themeBeforeMenuStyle = nil
+        local paletteKeys = {
+            "Main", "Second", "Accent", "ElementAccent", "Text",
+            "TextDark", "Error", "GradientStart", "GradientEnd", "Background"
+        }
+
+        local function capturePalette(theme)
+            local palette = {}
+            for _, key in ipairs(paletteKeys) do
+                palette[key] = theme[key]
+            end
+            return palette
+        end
+
+        local function syncColorPicker(flag, color)
+            local item = Library.Items[flag]
+            if item and item.Set and color then
+                pcall(item.Set, color)
+            end
+        end
+
+        local function setMenuStyleArt(preset, theme, enabled)
+            local root = WindowContainer:FindFirstChild("MenuStyleArt")
+            if not root then return end
+            root.Visible = enabled == true
+            for _, child in ipairs(root:GetChildren()) do
+                child:Destroy()
+            end
+            if not enabled then return end
+
+            local characters = preset and preset.Characters or {}
+            local decorations = preset and preset.Decorations or {}
+            local mobile = IsMobile
+            local currentHeight = math.max(WindowContainer.AbsoluteSize.Y, WindowContainer.Size.Y.Offset)
+
+            for index, character in ipairs(characters) do
+                local placement = character.Placement or (index == 1 and "Left" or "Right")
+                local width = mobile and (character.MobileWidth or 84) or (character.Width or 108)
+                local height = mobile and (character.MobileHeight or width) or (character.Height or width)
+                local anchor = Vector2.new(0.5, 0.5)
+                local position
+
+                if placement == "Top" then
+                    anchor = Vector2.new(0.5, 1)
+                    position = UDim2.new(0.5, character.XOffset or 0, 0, mobile and (character.MobileBottomOffset or 26) or (character.BottomOffset or 32))
+                elseif placement == "TopHang" then
+                    anchor = Vector2.new(0.5, 0)
+                    position = UDim2.new(
+                        mobile and (character.MobileXScale or character.XScale or 0.5) or (character.XScale or 0.5),
+                        mobile and (character.MobileXOffset or character.XOffset or 0) or (character.XOffset or 0),
+                        0,
+                        mobile and (character.MobileTopOffset or -10) or (character.TopOffset or -12)
+                    )
+                elseif placement == "Left" then
+                    position = UDim2.new(0, mobile and -(width * 0.18) or -(width * 0.5), 0, currentHeight * (character.HeightRatio or 0.34))
+                elseif placement == "Right" then
+                    position = UDim2.new(1, mobile and (character.MobileSideOffset or 16) or (character.SideOffset or 36), 0, currentHeight * (character.HeightRatio or 0.34))
+                else
+                    position = UDim2.new(0.5, character.XOffset or 0, 0, currentHeight * (character.HeightRatio or 0.34))
+                end
+
+                Create("ImageLabel", {
+                    Name = "Character_" .. tostring(character.Name or index),
+                    Parent = root,
+                    AnchorPoint = anchor,
+                    Position = position,
+                    Size = UDim2.fromOffset(width, height),
+                    BackgroundTransparency = 1,
+                    Image = character.Image or "",
+                    ImageColor3 = Color3.new(1, 1, 1),
+                    ImageTransparency = character.ImageTransparency or 0,
+                    ScaleType = Enum.ScaleType.Fit,
+                    Active = false,
+                    ZIndex = 22
+                })
+            end
+
+            for index, decoration in ipairs(decorations) do
+                local xScale = mobile and (decoration.MobileXScale or decoration.XScale or 0.5) or (decoration.XScale or 0.5)
+                local yOffset = mobile and (decoration.MobileYOffset or decoration.YOffset or 0) or (decoration.YOffset or 0)
+                if decoration.Kind == "Parachute" then
+                    local width = mobile and (decoration.MobileWidth or 38) or (decoration.Width or 52)
+                    local height = mobile and (decoration.MobileHeight or 52) or (decoration.Height or 70)
+                    local holder = Create("Frame", {
+                        Name = "Decoration_" .. tostring(decoration.Name or index),
+                        Parent = root,
+                        AnchorPoint = Vector2.new(0.5, 0),
+                        Position = UDim2.new(xScale, 0, 0, yOffset),
+                        Size = UDim2.fromOffset(width, height),
+                        BackgroundTransparency = 1,
+                        ZIndex = 21
+                    })
+                    local canopy = Create("Frame", {
+                        Name = "Canopy",
+                        Parent = holder,
+                        Position = UDim2.new(0.12, 0, 0, 2),
+                        Size = UDim2.new(0.76, 0, 0.30, 0),
+                        BackgroundColor3 = decoration.CanopyColor or Color3.fromRGB(255, 238, 187),
+                        BorderSizePixel = 0,
+                        ZIndex = 22
+                    })
+                    AddCorner(canopy, 24)
+                    Create("UIStroke", {Parent = canopy, Color = Style.Outline, Thickness = 1})
+                    Create("Frame", {
+                        Parent = holder,
+                        Position = UDim2.new(0.28, 0, 0.27, 0),
+                        Size = UDim2.new(0, 1, 0, height * 0.30),
+                        Rotation = -15,
+                        BackgroundColor3 = Style.Outline,
+                        BorderSizePixel = 0,
+                        ZIndex = 22
+                    })
+                    Create("Frame", {
+                        Parent = holder,
+                        Position = UDim2.new(0.72, 0, 0.27, 0),
+                        Size = UDim2.new(0, 1, 0, height * 0.30),
+                        Rotation = 15,
+                        BackgroundColor3 = Style.Outline,
+                        BorderSizePixel = 0,
+                        ZIndex = 22
+                    })
+                    Create("ImageLabel", {
+                        Name = "Toy",
+                        Parent = holder,
+                        AnchorPoint = Vector2.new(0.5, 0),
+                        Position = UDim2.new(0.5, 0, 0.55, 0),
+                        Size = UDim2.new(0.50, 0, 0.43, 0),
+                        BackgroundTransparency = 1,
+                        Image = decoration.Image or "",
+                        ScaleType = Enum.ScaleType.Fit,
+                        ZIndex = 23
+                    })
+                elseif decoration.Kind == "Symbol" then
+                    local size = mobile and (decoration.MobileSize or 18) or (decoration.Size or 24)
+                    Create("TextLabel", {
+                        Name = "Decoration_" .. tostring(decoration.Name or index),
+                        Parent = root,
+                        AnchorPoint = Vector2.new(0.5, 0.5),
+                        Position = UDim2.new(xScale, 0, 0, yOffset),
+                        Size = UDim2.fromOffset(size + 10, size + 10),
+                        BackgroundTransparency = 1,
+                        Text = decoration.Text or "✦",
+                        Font = Enum.Font.GothamBlack,
+                        TextSize = size,
+                        TextColor3 = decoration.Color or (theme and theme.ElementAccent) or Color3.new(1, 1, 1),
+                        TextStrokeColor3 = Style.Outline,
+                        TextStrokeTransparency = 0.25,
+                        ZIndex = 21
+                    })
+                end
+            end
+        end
+
+        local baseShellStyle = {
+            Background = Style.Background,
+            Panel = Style.Panel,
+            Element = Style.Element,
+            Outline = Style.Outline,
+            Icon = Style.Icon
+        }
+        local baseWindowTransparency = MainBgColor.BackgroundTransparency
+        local windowSizeBeforeMenuStyle = nil
+
+        local function applyShellStyle(preset, enabled)
+            local pastelShellActive = enabled == true and preset ~= nil and preset.Shell ~= nil
+            Library.MenuStyleShellActive = pastelShellActive
+            if OrbContainer then OrbContainer.Visible = not pastelShellActive end
+            local shell = pastelShellActive and preset.Shell or baseShellStyle
+            for key, value in pairs(baseShellStyle) do
+                Style[key] = shell[key] or value
+            end
+
+            Main.BackgroundColor3 = SelectedTheme.Main
+            MainBgColor.BackgroundColor3 = SelectedTheme.Main
+            MainBgColor.BackgroundTransparency = (enabled and preset and preset.Window and preset.Window.BackgroundTransparency ~= nil)
+                and preset.Window.BackgroundTransparency or baseWindowTransparency
+
+            local backgroundImage = SelectedTheme.Background
+            if enabled and preset and preset.Palette and preset.Palette.Background ~= nil then
+                backgroundImage = preset.Palette.Background
+            end
+            SetImageAsync(MainBgImage, "Image", backgroundImage)
+
+            if MainOutline then MainOutline.Color = Style.Outline end
+            if SearchFrame then SearchFrame.BackgroundColor3 = Style.Element end
+            if SearchStroke then SearchStroke.Color = SelectedTheme.ElementAccent end
+            if MoveIcon then MoveIcon.ImageColor3 = Style.Icon end
+            if ResizeBtn then ResizeBtn.ImageColor3 = Style.Icon end
+            if CloseX then
+                CloseX.TextColor3 = enabled and Style.Icon or Color3.new(1, 1, 1)
+            end
+            if Tooltip then Tooltip.BackgroundColor3 = Style.Element end
+            if TooltipStroke then TooltipStroke.Color = Style.Outline end
+            if OpenSettingsBtn then OpenSettingsBtn.BackgroundColor3 = Style.Element end
+
+            for _, obj in ipairs(Main:GetDescendants()) do
+                if obj:IsA("Frame") or obj:IsA("TextButton") then
+                    if obj.Name == "Block" or obj.Name == "SearchGroup" then
+                        obj.BackgroundColor3 = Style.Panel
+                    elseif obj.Name == "BlockSep" or obj.Name == "TopDivider" or obj.Name == "SideDivider"
+                        or obj.Name == "FooterDivider" or obj.Name == "DividerLine" then
+                        obj.BackgroundColor3 = Style.Outline
+                    elseif obj.Name == "Search" or obj.Name == "TabBtn" or obj.Name == "SettingsBtn" or obj.Name == "Tooltip" then
+                        obj.BackgroundColor3 = Style.Element
+                    end
+                elseif obj:IsA("UIStroke") then
+                    local parent = obj.Parent
+                    if parent == Main or (parent and (parent.Name == "Block" or parent.Name == "SearchGroup" or parent.Name == "Tooltip")) then
+                        obj.Color = Style.Outline
+                    elseif parent and parent.Name == "Search" then
+                        obj.Color = SelectedTheme.ElementAccent
+                    end
+                end
+            end
+
+            if enabled and preset and preset.Window then
+                if not windowSizeBeforeMenuStyle then
+                    windowSizeBeforeMenuStyle = WindowContainer.Size
+                end
+                local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or VP
+                local mobile = UIS.TouchEnabled and (viewport.X < 850 or viewport.Y < 600)
+                local width, height
+                if mobile then
+                    local margin = preset.Window.MobileMargin or 20
+                    width = math.max(280, viewport.X - margin * 2)
+                    height = math.max(300, viewport.Y - margin * 2)
+                else
+                    width = math.min(preset.Window.MaxWidth or 2240, math.max(760, math.floor(viewport.X * (preset.Window.DesktopWidthScale or 0.78))))
+                    height = math.min(preset.Window.MaxHeight or 1350, math.max(620, math.floor(viewport.Y * (preset.Window.DesktopHeightScale or 0.94))))
+                end
+                WindowContainer.Size = UDim2.fromOffset(width, height)
+            elseif enabled and windowSizeBeforeMenuStyle then
+                WindowContainer.Size = windowSizeBeforeMenuStyle
+            elseif not enabled and windowSizeBeforeMenuStyle then
+                WindowContainer.Size = windowSizeBeforeMenuStyle
+                windowSizeBeforeMenuStyle = nil
+            end
+        end
+
+        local function applyPalette(palette, menuStyleActive, preset)
+            local nextTheme = {}
+            for key, value in pairs(SelectedTheme) do
+                nextTheme[key] = value
+            end
+            for key, value in pairs(palette) do
+                nextTheme[key] = value
+                Themes.Default[key] = value
+            end
+            nextTheme.Gradient = GetGradientSeq(nextTheme)
+            Themes.Default.Gradient = nextTheme.Gradient
+            SelectedTheme = nextTheme
+            Library.MenuStyleActive = menuStyleActive == true
+
+            Main.BackgroundColor3 = nextTheme.Main
+            MainBgColor.BackgroundColor3 = nextTheme.Main
+            applyShellStyle(preset, menuStyleActive)
+            UpdateThemeObjects()
+            UpdateGradients(nextTheme.Gradient)
+
+            syncColorPicker("Settings_MainColor", nextTheme.Main)
+            syncColorPicker("Settings_SecondColor", nextTheme.Second)
+            syncColorPicker("Settings_ElementColor", nextTheme.ElementAccent)
+            syncColorPicker("Settings_TextColor", nextTheme.Text)
+            syncColorPicker("Settings_GradStart", nextTheme.GradientStart or nextTheme.Accent)
+            syncColorPicker("Settings_GradEnd", nextTheme.GradientEnd or nextTheme.Accent)
+
+            setMenuStyleArt(preset, nextTheme, menuStyleActive)
+            Library:EmitThemeChanged(nextTheme, menuStyleActive)
+        end
+
+        local function applySelectedMenuStyle()
+            local preset = MENU_STYLE_PRESETS[selectedMenuStyle]
+            if not preset then return end
+            local base = themeBeforeMenuStyle or capturePalette(SelectedTheme)
+            local palette = {}
+            for key, value in pairs(base) do
+                palette[key] = value
+            end
+            for key, value in pairs(preset.Palette) do
+                palette[key] = value
+            end
+            applyPalette(palette, true, preset)
+        end
+
+        local MenuStyleBlock = SettingsTab:CreateBlock({Name = "Menu Style", Side = "Right"})
+        MenuStyleBlock:CreateToggle({
+            Name = "Enable",
+            Flag = "Settings_MenuStyleEnabled",
+            Default = false,
+            Callback = function(value)
+                menuStyleEnabled = value == true
+                if menuStyleEnabled then
+                    themeBeforeMenuStyle = capturePalette(SelectedTheme)
+                    applySelectedMenuStyle()
+                else
+                    if themeBeforeMenuStyle then
+                        applyPalette(themeBeforeMenuStyle, false, nil)
+                    else
+                        setMenuStyleArt(nil, SelectedTheme, false)
+                        Library:EmitThemeChanged(SelectedTheme, false)
+                    end
+                    themeBeforeMenuStyle = nil
+                end
+            end
+        })
+        MenuStyleBlock:CreateDropdown({
+            Name = "Style",
+            Flag = "Settings_MenuStyle",
+            Items = MENU_STYLE_NAMES,
+            Default = selectedMenuStyle,
+            Callback = function(value)
+                if value and MENU_STYLE_PRESETS[value] then
+                    selectedMenuStyle = value
+                    if menuStyleEnabled then
+                        applySelectedMenuStyle()
+                    end
+                end
+            end
+        })
+    end
+
     local KeyBlock = SettingsTab:CreateBlock({Name = "Keybinds", Side = "Left"})
     
     KeyBlock:CreateKeybind({
@@ -4429,6 +5011,7 @@ function Elements:CreateDropdown(Cfg)
             SelectedTheme.Main = c
             Themes.Default.Main = c
             UpdateThemeObjects()
+            Library:EmitThemeChanged(SelectedTheme, Library.MenuStyleActive == true)
         end
     }) 
     
@@ -4440,6 +5023,7 @@ function Elements:CreateDropdown(Cfg)
             SelectedTheme.Second = c
             Themes.Default.Second = c
             UpdateThemeObjects()
+            Library:EmitThemeChanged(SelectedTheme, Library.MenuStyleActive == true)
         end
     })
     
@@ -4451,6 +5035,7 @@ function Elements:CreateDropdown(Cfg)
             SelectedTheme.ElementAccent = c
             Themes.Default.ElementAccent = c
             UpdateThemeObjects()
+            Library:EmitThemeChanged(SelectedTheme, Library.MenuStyleActive == true)
         end
     })
     
@@ -4462,6 +5047,7 @@ function Elements:CreateDropdown(Cfg)
             SelectedTheme.Text = c
             Themes.Default.Text = c
             UpdateThemeObjects()
+            Library:EmitThemeChanged(SelectedTheme, Library.MenuStyleActive == true)
         end
     })
     
@@ -4473,6 +5059,7 @@ function Elements:CreateDropdown(Cfg)
             SelectedTheme.GradientStart = c
             SelectedTheme.Gradient = GetGradientSeq(SelectedTheme)
             UpdateGradients(SelectedTheme.Gradient)
+            Library:EmitThemeChanged(SelectedTheme, Library.MenuStyleActive == true)
         end
     })
     
@@ -4484,6 +5071,7 @@ function Elements:CreateDropdown(Cfg)
             SelectedTheme.GradientEnd = c
             SelectedTheme.Gradient = GetGradientSeq(SelectedTheme)
             UpdateGradients(SelectedTheme.Gradient)
+            Library:EmitThemeChanged(SelectedTheme, Library.MenuStyleActive == true)
         end
     })
 
@@ -4558,6 +5146,7 @@ function Elements:CreateDropdown(Cfg)
             
             UpdateThemeObjects()
             UpdateGradients(SelectedTheme.Gradient)
+            Library:EmitThemeChanged(SelectedTheme, Library.MenuStyleActive == true)
 
             if Library.Items["Settings_MainColor"] then Library.Items["Settings_MainColor"].Set(NewTheme.Main) end
             if Library.Items["Settings_SecondColor"] then Library.Items["Settings_SecondColor"].Set(NewTheme.Second) end
