@@ -769,34 +769,53 @@ local function MakeDraggable(topbar, frame)
     end
 end
 
-local function MakeResizable(handle, frame)
-    local dragging, dragStart, startSize
-    local MinSize = Vector2.new(500, 350)
-    local MaxSize = Vector2.new(1000, 800)
-    
+local function MakeResizable(handle, frame, onResize)
+    local dragging, dragStart, startSize, startPosition
+
     handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
             startSize = frame.AbsoluteSize
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
+            startPosition = frame.Position
         end
     end)
-    
+
     local inputChangedConnection = UIS.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - dragStart
-            local newX = math.clamp(startSize.X + delta.X, MinSize.X, MaxSize.X)
-            local newY = math.clamp(startSize.Y + delta.Y, MinSize.Y, MaxSize.Y)
-            TS:Create(frame, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Size = UDim2.fromOffset(newX, newY)}):Play()
+        if not dragging or (input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch) then
+            return
+        end
+
+        local camera = workspace.CurrentCamera
+        local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
+        local isMobile = UIS.TouchEnabled and (viewport.X < 850 or viewport.Y < 600)
+        local minX = math.min(isMobile and 280 or 500, math.max(200, viewport.X - 24))
+        local minY = math.min(isMobile and 300 or 350, math.max(200, viewport.Y - 24))
+        local maxX = math.max(minX, math.min(1000, viewport.X - 24))
+        local maxY = math.max(minY, math.min(800, viewport.Y - 24))
+        local delta = input.Position - dragStart
+        local newX = math.clamp(startSize.X + delta.X, minX, maxX)
+        local newY = math.clamp(startSize.Y + delta.Y, minY, maxY)
+
+        -- Keep the top-left corner fixed while dragging the bottom-right resize grip.
+        frame.Size = UDim2.fromOffset(newX, newY)
+        frame.Position = UDim2.new(
+            startPosition.X.Scale, startPosition.X.Offset + (newX - startSize.X) / 2,
+            startPosition.Y.Scale, startPosition.Y.Offset + (newY - startSize.Y) / 2
+        )
+        if onResize then
+            pcall(onResize, newX, newY)
+        end
+    end)
+
+    local inputEndedConnection = UIS.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
         end
     end)
     if Library.WindowConnections then
         table.insert(Library.WindowConnections, inputChangedConnection)
+        table.insert(Library.WindowConnections, inputEndedConnection)
     end
 end
 
@@ -1263,8 +1282,12 @@ function Library:CreateWindow(Settings)
     local CustomIconID = Config.CustomIcon
     local sidebarViewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
     local CompactSidebar = Config.CompactSidebar == true and UIS.TouchEnabled and (sidebarViewport.X < 850 or sidebarViewport.Y < 600)
-    local SidebarWidth = CompactSidebar and 54 or 165
+    local CompactSidebarWidth = 52
+    local ExpandedSidebarWidth = 170
+    local SidebarExpanded = not CompactSidebar
+    local SidebarWidth = SidebarExpanded and ExpandedSidebarWidth or CompactSidebarWidth
     local SidebarX = CompactSidebar and 8 or 15
+    local refreshWindowLayout = nil
     local ContentX = SidebarX + SidebarWidth + 15
 
     local ScreenGui = Create("ScreenGui", {
@@ -1697,8 +1720,7 @@ function Library:CreateWindow(Settings)
     local TOPBAR_H = 48
     local FOOTER_H = 22
     local TAB_H = 32
-    SidebarWidth = CompactSidebar and 52 or 170
-    local BaseSidebarWidth = SidebarWidth
+    SidebarWidth = SidebarExpanded and ExpandedSidebarWidth or CompactSidebarWidth
 
     local WindowContainer = Create("Frame", {
         Name = "WindowContainer",
@@ -1792,6 +1814,16 @@ function Library:CreateWindow(Settings)
     -- Ust cizgi / sidebar dikey cizgi / footer cizgisi
     Divider({Name = "TopDivider", Parent = Main, Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 0, TOPBAR_H)})
     local SideDivider = Divider({Name = "SideDivider", Parent = Main, Size = UDim2.new(0, 1, 1, -FOOTER_H), Position = UDim2.new(0, SidebarWidth, 0, 0)})
+    local SidebarResizeHandle = Create("TextButton", {
+        Name = "SidebarResizeHandle",
+        Parent = Main,
+        Position = UDim2.new(0, SidebarWidth - 5, 0, TOPBAR_H + 1),
+        Size = UDim2.new(0, 10, 1, -(TOPBAR_H + FOOTER_H + 2)),
+        BackgroundTransparency = 1,
+        Text = "",
+        AutoButtonColor = false,
+        ZIndex = 30
+    })
     Divider({Name = "FooterDivider", Parent = Main, Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -FOOTER_H)})
 
     -- ===== TOP BAR =====
@@ -1808,8 +1840,8 @@ function Library:CreateWindow(Settings)
         Name = "Logo",
         Parent = TopBar,
         Size = UDim2.fromOffset(28, 28),
-        Position = CompactSidebar and UDim2.new(0, SidebarWidth / 2, 0.5, 0) or UDim2.new(0, 14, 0.5, 0),
-        AnchorPoint = CompactSidebar and Vector2.new(0.5, 0.5) or Vector2.new(0, 0.5),
+        Position = SidebarExpanded and UDim2.new(0, 14, 0.5, 0) or UDim2.new(0, SidebarWidth / 2, 0.5, 0),
+        AnchorPoint = SidebarExpanded and Vector2.new(0, 0.5) or Vector2.new(0.5, 0.5),
         BackgroundTransparency = 1,
         ZIndex = 7
     })
@@ -1818,7 +1850,7 @@ function Library:CreateWindow(Settings)
     local WindowTitle = Create("TextLabel", {
         Name = "WindowTitle",
         Parent = TopBar,
-        Visible = not CompactSidebar,
+        Visible = SidebarExpanded,
         Size = UDim2.new(0, SidebarWidth - 54, 1, 0),
         Position = UDim2.new(0, 48, 0, 0),
         BackgroundTransparency = 1,
@@ -1983,7 +2015,11 @@ function Library:CreateWindow(Settings)
     })
     ApplyIcon(ResizeBtn, "move-diagonal-2")
     ResizeBtn.Rotation = 90
-    MakeResizable(ResizeBtn, WindowContainer)
+    MakeResizable(ResizeBtn, WindowContainer, function()
+        if refreshWindowLayout then
+            refreshWindowLayout()
+        end
+    end)
 
     -- ===== TOOLTIP (compact sidebar icin) =====
     local Tooltip = Create("TextLabel", {
@@ -2009,7 +2045,9 @@ function Library:CreateWindow(Settings)
 
     local function AttachTooltip(obj, text)
         obj.MouseEnter:Connect(function()
-            if Library.MenuStyleShellActive and not IsMobile then
+            local currentWidth = WindowContainer.AbsoluteSize.X > 0 and WindowContainer.AbsoluteSize.X or WindowContainer.Size.X.Offset
+            local isVisuallyExpanded = SidebarExpanded and currentWidth >= 420
+            if isVisuallyExpanded then
                 Tooltip.Visible = false
                 return
             end
@@ -2074,8 +2112,8 @@ function Library:CreateWindow(Settings)
         Name = "TabIcon",
         Parent = OpenSettingsBtn,
         Size = UDim2.fromOffset(20, 20),
-        AnchorPoint = CompactSidebar and Vector2.new(0.5, 0.5) or Vector2.new(0, 0.5),
-        Position = CompactSidebar and UDim2.new(0.5, 0, 0.5, 0) or UDim2.new(0, 10, 0.5, 0),
+        AnchorPoint = SidebarExpanded and Vector2.new(0, 0.5) or Vector2.new(0.5, 0.5),
+        Position = SidebarExpanded and UDim2.new(0, 10, 0.5, 0) or UDim2.new(0.5, 0, 0.5, 0),
         BackgroundTransparency = 1,
         ImageColor3 = SelectedTheme.ElementAccent,
         ImageTransparency = 0.45,
@@ -2087,7 +2125,7 @@ function Library:CreateWindow(Settings)
     local SettingsLabel = Create("TextLabel", {
         Name = "TabLabel",
         Parent = OpenSettingsBtn,
-        Visible = not CompactSidebar,
+        Visible = SidebarExpanded,
         Size = UDim2.new(1, -40, 1, 0),
         Position = UDim2.new(0, 36, 0, 0),
         BackgroundTransparency = 1,
@@ -2100,9 +2138,7 @@ function Library:CreateWindow(Settings)
         ThemeTag = "TextDark"
     })
     table.insert(Library.ThemeObjects.TabLabels, {Label = SettingsLabel, Btn = OpenSettingsBtn, Icon = SettingsGear})
-    if CompactSidebar then
-        AttachTooltip(OpenSettingsBtn, "UI Settings")
-    end
+    AttachTooltip(OpenSettingsBtn, "UI Settings")
 
     local SettingsIsActive = false
     OpenSettingsBtn.MouseEnter:Connect(function()
@@ -2656,7 +2692,7 @@ function Library:CreateWindow(Settings)
         local TabLabel = Create("TextLabel", {
             Name = "TabLabel",
             Parent = TabBtn,
-            Visible = not (CompactSidebar and HasIcon),
+            Visible = SidebarExpanded,
             Size = UDim2.new(1, HasIcon and -42 or -20, 1, 0),
             Position = UDim2.new(0, HasIcon and 36 or 12, 0, 0),
             BackgroundTransparency = 1,
@@ -2675,8 +2711,8 @@ function Library:CreateWindow(Settings)
                 Name = "TabIcon",
                 Parent = TabBtn,
                 Size = UDim2.fromOffset(20, 20),
-                AnchorPoint = CompactSidebar and Vector2.new(0.5, 0.5) or Vector2.new(0, 0.5),
-                Position = CompactSidebar and UDim2.new(0.5, 0, 0.5, 0) or UDim2.new(0, 10, 0.5, 0),
+                AnchorPoint = SidebarExpanded and Vector2.new(0, 0.5) or Vector2.new(0.5, 0.5),
+                Position = SidebarExpanded and UDim2.new(0, 10, 0.5, 0) or UDim2.new(0.5, 0, 0.5, 0),
                 BackgroundTransparency = 1,
                 ImageColor3 = SelectedTheme.ElementAccent,
                 ImageTransparency = 0.45,
@@ -2686,9 +2722,7 @@ function Library:CreateWindow(Settings)
         end
         table.insert(Library.ThemeObjects.TabLabels, {Label = TabLabel, Btn = TabBtn, Icon = TabIcon})
 
-        if CompactSidebar then
-            AttachTooltip(TabBtn, TabName)
-        end
+        AttachTooltip(TabBtn, TabName)
 
         local hoverTweenTab, leaveTweenTab
         TabBtn.MouseEnter:Connect(function()
@@ -4761,7 +4795,6 @@ function Elements:CreateDropdown(Cfg)
             Icon = Style.Icon
         }
         local baseWindowTransparency = MainBgColor.BackgroundTransparency
-        local windowSizeBeforeMenuStyle = nil
 
         local function applyShellStyle(preset, enabled)
             local pastelShellActive = enabled == true and preset ~= nil and preset.Shell ~= nil
@@ -4795,73 +4828,83 @@ function Elements:CreateDropdown(Cfg)
             if TooltipStroke then TooltipStroke.Color = Style.Outline end
             if OpenSettingsBtn then OpenSettingsBtn.BackgroundColor3 = Style.Element end
 
-            local expandedSidebar = (not CompactSidebar) or (pastelShellActive and not IsMobile)
-            if Tooltip and expandedSidebar then Tooltip.Visible = false end
-            SidebarWidth = expandedSidebar and 170 or BaseSidebarWidth
-            if TabContainer then
-                TabContainer.Size = UDim2.new(0, SidebarWidth, 1, -(TOPBAR_H + FOOTER_H + 1))
-                TabContainer.BackgroundColor3 = Style.Panel
-                TabContainer.BackgroundTransparency = pastelShellActive and 0.12 or 1
-            end
-            if SideDivider then
-                SideDivider.Position = UDim2.new(0, SidebarWidth, 0, 0)
-            end
-            if PageContainer then
-                PageContainer.Size = UDim2.new(1, -(SidebarWidth + 8 + 6), 1, -(TOPBAR_H + FOOTER_H + 14))
-                PageContainer.Position = UDim2.new(0, SidebarWidth + 8, 0, TOPBAR_H + 8)
-            end
-            if SearchFrame then
-                SearchFrame.Position = UDim2.new(0, SidebarWidth + 8, 0.5, 0)
-                SearchFrame.Size = UDim2.new(1, -(SidebarWidth + 8 + 44), 0, 30)
-            end
-            if LogoIcon then
-                LogoIcon.AnchorPoint = expandedSidebar and Vector2.new(0, 0.5) or Vector2.new(0.5, 0.5)
-                LogoIcon.Position = expandedSidebar and UDim2.new(0, 14, 0.5, 0) or UDim2.new(0, SidebarWidth / 2, 0.5, 0)
-            end
-            if WindowTitle then
-                WindowTitle.Visible = expandedSidebar
-                WindowTitle.Size = UDim2.new(0, SidebarWidth - 54, 1, 0)
-                WindowTitle.Position = UDim2.new(0, 48, 0, 0)
-                WindowTitle.TextSize = pastelShellActive and 15 or 14
-            end
-            if SettingsGear then
-                SettingsGear.AnchorPoint = expandedSidebar and Vector2.new(0, 0.5) or Vector2.new(0.5, 0.5)
-                SettingsGear.Position = expandedSidebar and UDim2.new(0, 10, 0.5, 0) or UDim2.new(0.5, 0, 0.5, 0)
-            end
-            if SettingsLabel then
-                SettingsLabel.Visible = expandedSidebar
-                SettingsLabel.Size = UDim2.new(1, -40, 1, 0)
-                SettingsLabel.Position = UDim2.new(0, 36, 0, 0)
-                SettingsLabel.TextSize = pastelShellActive and 14 or 13
-            end
-            if TabContainer then
-                for _, tabButton in ipairs(TabContainer:GetChildren()) do
-                    if tabButton:IsA("TextButton") then
-                        local label = tabButton:FindFirstChild("TabLabel")
-                        local icon = tabButton:FindFirstChild("TabIcon")
-                        local hasIcon = icon ~= nil
-                        if label then
-                            label.Visible = expandedSidebar or not (CompactSidebar and hasIcon)
-                            if expandedSidebar then
-                                label.Size = UDim2.new(1, -42, 1, 0)
-                                label.Position = UDim2.new(0, 36, 0, 0)
-                                label.TextSize = pastelShellActive and 14 or 13
-                            else
-                                label.Size = UDim2.new(1, hasIcon and -42 or -20, 1, 0)
-                                label.Position = UDim2.new(0, hasIcon and 36 or 12, 0, 0)
-                                label.TextSize = 13
+            local function ApplySidebarLayout()
+                local currentWidth = WindowContainer.AbsoluteSize.X > 0 and WindowContainer.AbsoluteSize.X or WindowContainer.Size.X.Offset
+                local expandedSidebar = SidebarExpanded and currentWidth >= 420
+                local availableWidth = math.max(CompactSidebarWidth, currentWidth - 250)
+                SidebarWidth = expandedSidebar and math.min(ExpandedSidebarWidth, availableWidth) or CompactSidebarWidth
+
+                if Tooltip and expandedSidebar then Tooltip.Visible = false end
+                if TabContainer then
+                    TabContainer.Size = UDim2.new(0, SidebarWidth, 1, -(TOPBAR_H + FOOTER_H + 1))
+                    TabContainer.BackgroundColor3 = Style.Panel
+                    TabContainer.BackgroundTransparency = pastelShellActive and 0.12 or 1
+                end
+                if SideDivider then
+                    SideDivider.Position = UDim2.new(0, SidebarWidth, 0, 0)
+                end
+                if SidebarResizeHandle then
+                    SidebarResizeHandle.Position = UDim2.new(0, SidebarWidth - 5, 0, TOPBAR_H + 1)
+                    SidebarResizeHandle.Size = UDim2.new(0, 10, 1, -(TOPBAR_H + FOOTER_H + 2))
+                end
+                if PageContainer then
+                    PageContainer.Size = UDim2.new(1, -(SidebarWidth + 8 + 6), 1, -(TOPBAR_H + FOOTER_H + 14))
+                    PageContainer.Position = UDim2.new(0, SidebarWidth + 8, 0, TOPBAR_H + 8)
+                end
+                if SearchFrame then
+                    SearchFrame.Position = UDim2.new(0, SidebarWidth + 8, 0.5, 0)
+                    SearchFrame.Size = UDim2.new(1, -(SidebarWidth + 8 + 44), 0, 30)
+                end
+                if LogoIcon then
+                    LogoIcon.AnchorPoint = expandedSidebar and Vector2.new(0, 0.5) or Vector2.new(0.5, 0.5)
+                    LogoIcon.Position = expandedSidebar and UDim2.new(0, 14, 0.5, 0) or UDim2.new(0, SidebarWidth / 2, 0.5, 0)
+                end
+                if WindowTitle then
+                    WindowTitle.Visible = expandedSidebar
+                    WindowTitle.Size = UDim2.new(0, SidebarWidth - 54, 1, 0)
+                    WindowTitle.Position = UDim2.new(0, 48, 0, 0)
+                    WindowTitle.TextSize = pastelShellActive and 15 or 14
+                end
+                if SettingsGear then
+                    SettingsGear.AnchorPoint = expandedSidebar and Vector2.new(0, 0.5) or Vector2.new(0.5, 0.5)
+                    SettingsGear.Position = expandedSidebar and UDim2.new(0, 10, 0.5, 0) or UDim2.new(0.5, 0, 0.5, 0)
+                end
+                if SettingsLabel then
+                    SettingsLabel.Visible = expandedSidebar
+                    SettingsLabel.Size = UDim2.new(1, -40, 1, 0)
+                    SettingsLabel.Position = UDim2.new(0, 36, 0, 0)
+                    SettingsLabel.TextSize = pastelShellActive and 14 or 13
+                end
+                if TabContainer then
+                    for _, tabButton in ipairs(TabContainer:GetChildren()) do
+                        if tabButton:IsA("TextButton") then
+                            local label = tabButton:FindFirstChild("TabLabel")
+                            local icon = tabButton:FindFirstChild("TabIcon")
+                            if label then
+                                label.Visible = expandedSidebar
+                                if expandedSidebar then
+                                    label.Size = UDim2.new(1, -42, 1, 0)
+                                    label.Position = UDim2.new(0, 36, 0, 0)
+                                    label.TextSize = pastelShellActive and 14 or 13
+                                else
+                                    label.Size = UDim2.new(1, -42, 1, 0)
+                                    label.Position = UDim2.new(0, 36, 0, 0)
+                                    label.TextSize = 13
+                                end
                             end
+                            if icon then
+                                icon.AnchorPoint = expandedSidebar and Vector2.new(0, 0.5) or Vector2.new(0.5, 0.5)
+                                icon.Position = expandedSidebar and UDim2.new(0, 10, 0.5, 0) or UDim2.new(0.5, 0, 0.5, 0)
+                            end
+                            local selected = (ActiveTab and ActiveTab.Btn == tabButton) or (SettingsIsActive and tabButton == OpenSettingsBtn)
+                            tabButton.BackgroundColor3 = Style.Element
+                            tabButton.BackgroundTransparency = selected and 0 or 1
                         end
-                        if icon then
-                            icon.AnchorPoint = expandedSidebar and Vector2.new(0, 0.5) or Vector2.new(0.5, 0.5)
-                            icon.Position = expandedSidebar and UDim2.new(0, 10, 0.5, 0) or UDim2.new(0.5, 0, 0.5, 0)
-                        end
-                        local selected = (ActiveTab and ActiveTab.Btn == tabButton) or (SettingsIsActive and tabButton == OpenSettingsBtn)
-                        tabButton.BackgroundColor3 = Style.Element
-                        tabButton.BackgroundTransparency = selected and 0 or 1
                     end
                 end
             end
+            ApplySidebarLayout()
+            refreshWindowLayout = ApplySidebarLayout
 
             for _, obj in ipairs(Main:GetDescendants()) do
                 if obj:IsA("Frame") or obj:IsA("TextButton") then
@@ -4883,19 +4926,64 @@ function Elements:CreateDropdown(Cfg)
                 end
             end
 
-            if enabled and preset and preset.Window then
-                if not windowSizeBeforeMenuStyle then
-                    windowSizeBeforeMenuStyle = WindowContainer.Size
-                end
-                -- Menu Style degisince pencere boyutunu buyutme; mevcut standart boyutu koru.
-                WindowContainer.Size = windowSizeBeforeMenuStyle
-            elseif enabled and windowSizeBeforeMenuStyle then
-                WindowContainer.Size = windowSizeBeforeMenuStyle
-            elseif not enabled and windowSizeBeforeMenuStyle then
-                WindowContainer.Size = windowSizeBeforeMenuStyle
-                windowSizeBeforeMenuStyle = nil
+
+        end
+
+        -- Initialize the responsive sidebar layout once; later resize/style changes reuse it.
+        applyShellStyle(nil, false)
+
+        local sidebarDragging = false
+        local sidebarDragStartX = nil
+        local sidebarDragMoved = false
+
+        local function refreshSidebarLayout()
+            if refreshWindowLayout then
+                refreshWindowLayout()
             end
         end
+
+        SidebarResizeHandle.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                sidebarDragging = true
+                sidebarDragStartX = input.Position.X
+                sidebarDragMoved = false
+            end
+        end)
+
+        local sidebarInputChanged = UIS.InputChanged:Connect(function(input)
+            if not sidebarDragging then return end
+            if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then
+                return
+            end
+
+            local deltaX = math.abs(input.Position.X - (sidebarDragStartX or input.Position.X))
+            if deltaX > 4 then sidebarDragMoved = true end
+            local requestedWidth = input.Position.X - Main.AbsolutePosition.X
+            if requestedWidth < 94 then
+                SidebarExpanded = false
+            else
+                SidebarExpanded = true
+                ExpandedSidebarWidth = math.clamp(requestedWidth, 120, 240)
+            end
+            refreshSidebarLayout()
+        end)
+        local sidebarInputEnded = UIS.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                sidebarDragging = false
+                sidebarDragStartX = nil
+            end
+        end)
+        table.insert(Library.WindowConnections, sidebarInputChanged)
+        table.insert(Library.WindowConnections, sidebarInputEnded)
+
+        SidebarResizeHandle.Activated:Connect(function()
+            if sidebarDragMoved then
+                sidebarDragMoved = false
+                return
+            end
+            SidebarExpanded = not SidebarExpanded
+            refreshSidebarLayout()
+        end)
 
         local function applyPalette(palette, menuStyleActive, preset)
             local nextTheme = {}
